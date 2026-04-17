@@ -1,65 +1,136 @@
-import Image from "next/image";
+'use client'
 
-export default function Home() {
+import { useEffect, useState, useCallback } from 'react'
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend,
+} from 'recharts'
+import KpiCard from '@/components/KpiCard'
+import MonthSelector from '@/components/MonthSelector'
+import { getAvailableMonths, getKpis, getMonthlyTrend, getCategorySummary } from '@/lib/queries'
+
+const COLORS = ['#16a34a', '#2563eb', '#d97706', '#dc2626', '#7c3aed', '#0891b2', '#be185d', '#65a30d', '#ea580c']
+
+function fmt(n: number) {
+  if (n >= 100000000) return `${(n / 100000000).toFixed(2)}億円`
+  if (n >= 10000) return `${(n / 10000).toFixed(0)}万円`
+  return `${n.toLocaleString()}円`
+}
+
+export default function DashboardPage() {
+  const [months, setMonths] = useState<string[]>([])
+  const [selected, setSelected] = useState('')
+  const [kpis, setKpis] = useState({ totalSales: 0, totalQuantity: 0, storeCount: 0, productCount: 0 })
+  const [trend, setTrend] = useState<{ year_month: string; total_sales: number }[]>([])
+  const [categories, setCategories] = useState<{ category_small_name: string; total_sales: number }[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    getAvailableMonths().then((ms) => {
+      setMonths(ms)
+      if (ms.length > 0) setSelected(ms[0])
+      else setLoading(false)
+    })
+  }, [])
+
+  const load = useCallback(async (month: string) => {
+    if (!month) return
+    setLoading(true)
+    const [k, t, c] = await Promise.all([
+      getKpis(month),
+      getMonthlyTrend(),
+      getCategorySummary(month),
+    ])
+    setKpis(k)
+    setTrend(t)
+    setCategories(c)
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { if (selected) load(selected) }, [selected, load])
+
+  const formatMonth = (ym: string) => {
+    const [y, m] = ym.split('-')
+    return `${y}/${parseInt(m)}`
+  }
+
+  if (!loading && months.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-96 text-center">
+        <p className="text-5xl mb-4">📂</p>
+        <p className="text-xl font-bold text-gray-700">データがありません</p>
+        <p className="text-gray-500 mt-2">「データ管理」ページからCSVをアップロードしてください</p>
+        <a href="/admin" className="mt-4 inline-block bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors">
+          データ管理へ →
+        </a>
+      </div>
+    )
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h2 className="text-2xl font-bold text-gray-950">ダッシュボード</h2>
+        <MonthSelector months={months} selected={selected} onChange={setSelected} />
+      </div>
+
+      {loading ? (
+        <div className="text-center py-20 text-gray-400">読み込み中...</div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <KpiCard label="総売上" value={fmt(kpis.totalSales)} icon="💴" />
+            <KpiCard label="総販売点数" value={`${kpis.totalQuantity.toLocaleString()}点`} icon="📦" />
+            <KpiCard label="対象店舗数" value={`${kpis.storeCount}店舗`} icon="🏪" />
+            <KpiCard label="伊藤園商品SKU" value={`${kpis.productCount.toLocaleString()}品`} icon="🍵" />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+              <h3 className="text-sm font-semibold text-gray-700 mb-4">月別売上推移（時系列）</h3>
+              {trend.length > 0 ? (
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart data={trend}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="year_month" tickFormatter={formatMonth} tick={{ fontSize: 11 }} />
+                    <YAxis tickFormatter={(v) => `${(v / 10000).toFixed(0)}万`} tick={{ fontSize: 11 }} width={55} />
+                    <Tooltip formatter={(v) => [`${Number(v).toLocaleString()}円`, '売上']} labelFormatter={(l) => formatMonth(String(l))} />
+                    <Bar dataKey="total_sales" fill="#16a34a" radius={[4, 4, 0, 0]} name="売上" />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="text-center text-gray-400 py-16 text-sm">月次データが蓄積されると推移グラフが表示されます</p>
+              )}
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+              <h3 className="text-sm font-semibold text-gray-700 mb-4">カテゴリ別売上構成</h3>
+              {categories.length > 0 ? (
+                <ResponsiveContainer width="100%" height={240}>
+                  <PieChart>
+                    <Pie
+                      data={categories}
+                      dataKey="total_sales"
+                      nameKey="category_small_name"
+                      cx="50%"
+                      cy="40%"
+                      outerRadius={75}
+                    >
+                      {categories.map((_, i) => (
+                        <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Legend formatter={(v) => <span style={{ fontSize: 10 }}>{v}</span>} iconSize={8} />
+                    <Tooltip formatter={(v) => [`${Number(v).toLocaleString()}円`]} />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <p className="text-center text-gray-400 py-16 text-sm">データなし</p>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
-  );
+  )
 }
