@@ -14,8 +14,11 @@ export async function getAvailableMonths(): Promise<string[]> {
   return (data as { year_month: string }[]).map((r) => r.year_month)
 }
 
-export async function getKpis(yearMonth: string) {
-  const { data, error } = await supabase.rpc('get_kpis', { p_year_month: yearMonth })
+export async function getKpis(startMonth: string, endMonth?: string) {
+  const { data, error } = await supabase.rpc('get_kpis', {
+    p_start_month: startMonth,
+    p_end_month: endMonth ?? null,
+  })
   if (error || !data) return { totalSales: 0, totalQuantity: 0, storeCount: 0, productCount: 0 }
   return data as { totalSales: number; totalQuantity: number; storeCount: number; productCount: number }
 }
@@ -30,21 +33,31 @@ export async function getMonthlyTrend() {
   }))
 }
 
-export async function getStoreSummary(yearMonth: string) {
-  const { data, error } = await supabase.rpc('get_store_summary', { p_year_month: yearMonth })
+export async function getStoreSummary(startMonth: string, endMonth?: string) {
+  const { data, error } = await supabase.rpc('get_store_summary', {
+    p_start_month: startMonth,
+    p_end_month: endMonth ?? null,
+  })
   if (error || !data) return []
-  return (data as { store_code: number; store_name: string; total_sales: number; total_quantity: number; share: number }[]).map((r) => ({
+  return (data as {
+    store_code: number; store_name: string
+    total_sales: number; total_quantity: number; share: number
+    yoy_sales: number | null; yoy_quantity: number | null
+  }[]).map((r) => ({
     store_code: r.store_code,
     store_name: r.store_name,
     total_sales: Number(r.total_sales),
     total_quantity: Number(r.total_quantity),
     share: Number(r.share),
+    yoy_sales: r.yoy_sales !== null ? Number(r.yoy_sales) : null,
+    yoy_quantity: r.yoy_quantity !== null ? Number(r.yoy_quantity) : null,
   }))
 }
 
-export async function getCategorySummary(yearMonth: string, storeCode?: number) {
+export async function getCategorySummary(startMonth: string, endMonth?: string, storeCode?: number) {
   const { data, error } = await supabase.rpc('get_category_summary', {
-    p_year_month: yearMonth,
+    p_start_month: startMonth,
+    p_end_month: endMonth ?? null,
     p_store_code: storeCode ?? null,
   })
   if (error || !data) return []
@@ -56,58 +69,92 @@ export async function getCategorySummary(yearMonth: string, storeCode?: number) 
 }
 
 export async function getProductRanking(
-  yearMonth: string,
+  startMonth: string,
+  endMonth?: string,
   storeCode?: number,
   categorySmallName?: string,
   limit = 100
 ) {
   const { data, error } = await supabase.rpc('get_product_ranking', {
-    p_year_month: yearMonth,
+    p_start_month: startMonth,
+    p_end_month: endMonth ?? null,
     p_store_code: storeCode ?? null,
     p_category_small_name: categorySmallName ?? null,
     p_limit: limit,
   })
   if (error || !data) return []
-  return (data as { product_code: string; product_name: string; maker_name: string; category_small_name: string; total_sales: number; total_quantity: number }[]).map(
-    (r, i) => ({
-      product_code: r.product_code,
-      product_name: r.product_name,
-      maker_name: r.maker_name ?? '',
-      category_small_name: r.category_small_name,
-      total_sales: Number(r.total_sales),
-      total_quantity: Number(r.total_quantity),
-      rank: i + 1,
-    })
-  )
+  return (data as {
+    product_code: string; product_name: string; maker_name: string; category_small_name: string
+    total_sales: number; total_quantity: number
+    yoy_sales: number | null; yoy_quantity: number | null
+  }[]).map((r, i) => ({
+    product_code: r.product_code,
+    product_name: r.product_name,
+    maker_name: r.maker_name ?? '',
+    category_small_name: r.category_small_name,
+    total_sales: Number(r.total_sales),
+    total_quantity: Number(r.total_quantity),
+    yoy_sales: r.yoy_sales !== null ? Number(r.yoy_sales) : null,
+    yoy_quantity: r.yoy_quantity !== null ? Number(r.yoy_quantity) : null,
+    rank: i + 1,
+  }))
 }
 
-export async function getCategories(yearMonth: string) {
-  const { data, error } = await supabase.rpc('get_categories', { p_year_month: yearMonth })
+export async function getCategories(startMonth: string, endMonth?: string) {
+  const { data, error } = await supabase.rpc('get_categories', {
+    p_start_month: startMonth,
+    p_end_month: endMonth ?? null,
+  })
   if (error || !data) return []
   return (data as { category_small_name: string }[]).map((r) => r.category_small_name)
 }
 
 export async function getMakerShare(
-  yearMonth: string,
+  startMonth: string,
+  endMonth?: string,
   storeCode?: number,
   categorySmallName?: string
 ) {
   const { data, error } = await supabase.rpc('get_maker_share', {
-    p_year_month: yearMonth,
+    p_start_month: startMonth,
+    p_end_month: endMonth ?? null,
     p_store_code: storeCode ?? null,
     p_category_small_name: categorySmallName ?? null,
   })
   if (error || !data) return []
-  return (data as { maker_name: string; total_sales: number; total_quantity: number; share: number }[]).map((r) => ({
+  return (data as {
+    maker_name: string; total_sales: number; total_quantity: number; share: number
+    yoy_sales: number | null; yoy_quantity: number | null
+  }[]).map((r) => ({
     maker_name: r.maker_name,
     total_sales: Number(r.total_sales),
     total_quantity: Number(r.total_quantity),
     share: Number(r.share),
+    yoy_sales: r.yoy_sales !== null ? Number(r.yoy_sales) : null,
+    yoy_quantity: r.yoy_quantity !== null ? Number(r.yoy_quantity) : null,
   }))
 }
 
-export async function getMatrixData(yearMonth: string) {
-  const { data, error } = await supabase.rpc('get_matrix_data', { p_year_month: yearMonth })
+export async function getMakerTrend(storeCode?: number, categorySmallName?: string, topN = 8) {
+  const { data, error } = await supabase.rpc('get_maker_trend', {
+    p_store_code: storeCode ?? null,
+    p_category_small_name: categorySmallName ?? null,
+    p_top_n: topN,
+  })
+  if (error || !data) return []
+  return (data as { year_month: string; maker_name: string; total_sales: number; share: number }[]).map((r) => ({
+    year_month: r.year_month,
+    maker_name: r.maker_name,
+    total_sales: Number(r.total_sales),
+    share: Number(r.share),
+  }))
+}
+
+export async function getMatrixData(startMonth: string, endMonth?: string) {
+  const { data, error } = await supabase.rpc('get_matrix_data', {
+    p_start_month: startMonth,
+    p_end_month: endMonth ?? null,
+  })
   if (error || !data) return { stores: [], categories: [], matrix: {} }
 
   const rows = data as { store_code: number; store_name: string; category_small_name: string; total_sales: number }[]
@@ -136,8 +183,11 @@ export async function getMatrixData(yearMonth: string) {
   return { stores, categories, matrix }
 }
 
-export async function getItoenData(yearMonth: string) {
-  const { data, error } = await supabase.rpc('get_itouen_all', { p_year_month: yearMonth })
+export async function getItoenData(startMonth: string, endMonth?: string) {
+  const { data, error } = await supabase.rpc('get_itouen_all', {
+    p_start_month: startMonth,
+    p_end_month: endMonth ?? null,
+  })
   if (error || !data) return { stores: [], products: [], salesMap: {}, indexMap: {} }
 
   const raw = data as {

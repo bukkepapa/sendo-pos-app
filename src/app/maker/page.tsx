@@ -4,14 +4,26 @@ import { useEffect, useState, useCallback } from 'react'
 import {
   PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  LineChart, Line,
 } from 'recharts'
-import MonthSelector from '@/components/MonthSelector'
-import { getAvailableMonths, getMakerShare, getCategories, getStoreSummary } from '@/lib/queries'
+import MonthRangeSelector from '@/components/MonthRangeSelector'
+import YoYBadge from '@/components/YoYBadge'
+import { useAppState } from '@/context/AppStateContext'
+import { getMakerShare, getMakerTrend, getCategories, getStoreSummary } from '@/lib/queries'
 
 type MakerRow = {
   maker_name: string
   total_sales: number
   total_quantity: number
+  share: number
+  yoy_sales: number | null
+  yoy_quantity: number | null
+}
+
+type TrendRow = {
+  year_month: string
+  maker_name: string
+  total_sales: number
   share: number
 }
 
@@ -27,64 +39,82 @@ function fmt(n: number) {
   return `${n.toLocaleString()}円`
 }
 
-// 上位N件 + その他をまとめるヘルパー
 function groupOthers(data: MakerRow[], topN = 12): MakerRow[] {
   if (data.length <= topN) return data
   const top = data.slice(0, topN)
   const others = data.slice(topN)
-  const othersSales = others.reduce((s, r) => s + r.total_sales, 0)
-  const othersQty = others.reduce((s, r) => s + r.total_quantity, 0)
-  const othersShare = others.reduce((s, r) => s + r.share, 0)
-  return [...top, { maker_name: 'その他', total_sales: othersSales, total_quantity: othersQty, share: othersShare }]
+  return [...top, {
+    maker_name: 'その他',
+    total_sales: others.reduce((s, r) => s + r.total_sales, 0),
+    total_quantity: others.reduce((s, r) => s + r.total_quantity, 0),
+    share: others.reduce((s, r) => s + r.share, 0),
+    yoy_sales: null,
+    yoy_quantity: null,
+  }]
+}
+
+// トレンドデータをRecharts用に変換（月ごとのオブジェクトに各メーカーの値を展開）
+function pivotTrend(rows: TrendRow[]): { year_month: string; [key: string]: number | string }[] {
+  const map = new Map<string, { year_month: string; [key: string]: number | string }>()
+  for (const r of rows) {
+    if (!map.has(r.year_month)) map.set(r.year_month, { year_month: r.year_month })
+    map.get(r.year_month)![r.maker_name] = r.share
+  }
+  return [...map.values()].sort((a, b) => String(a.year_month).localeCompare(String(b.year_month)))
 }
 
 export default function MakerPage() {
-  const [months, setMonths] = useState<string[]>([])
-  const [selected, setSelected] = useState('')
+  const { startMonth, endMonth } = useAppState()
   const [stores, setStores] = useState<{ store_code: number; store_name: string }[]>([])
   const [categories, setCategories] = useState<string[]>([])
   const [selectedStore, setSelectedStore] = useState<number | undefined>()
   const [selectedCategory, setSelectedCategory] = useState<string | undefined>()
   const [makers, setMakers] = useState<MakerRow[]>([])
+  const [trend, setTrend] = useState<TrendRow[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    getAvailableMonths().then((ms) => {
-      setMonths(ms)
-      if (ms.length > 0) setSelected(ms[0])
-      else setLoading(false)
-    })
-  }, [])
-
-  useEffect(() => {
-    if (!selected) return
-    Promise.all([getStoreSummary(selected), getCategories(selected)]).then(([s, c]) => {
+    if (!startMonth) return
+    Promise.all([getStoreSummary(startMonth, endMonth), getCategories(startMonth, endMonth)]).then(([s, c]) => {
       setStores(s.map((x) => ({ store_code: x.store_code, store_name: x.store_name })))
       setCategories(c)
     })
-  }, [selected])
+  }, [startMonth, endMonth])
 
-  const load = useCallback(async (month: string, store?: number, cat?: string) => {
-    if (!month) return
+  const load = useCallback(async (start: string, end: string, store?: number, cat?: string) => {
+    if (!start) return
     setLoading(true)
-    const data = await getMakerShare(month, store, cat)
-    setMakers(data)
+    const [m, t] = await Promise.all([
+      getMakerShare(start, end, store, cat),
+      getMakerTrend(store, cat, 8),
+    ])
+    setMakers(m)
+    setTrend(t)
     setLoading(false)
   }, [])
 
   useEffect(() => {
-    if (selected) load(selected, selectedStore, selectedCategory)
-  }, [selected, selectedStore, selectedCategory, load])
+    if (startMonth) load(startMonth, endMonth, selectedStore, selectedCategory)
+  }, [startMonth, endMonth, selectedStore, selectedCategory, load])
 
   const pieData = groupOthers(makers, 12)
   const barData = makers.slice(0, 15)
   const totalSales = makers.reduce((s, r) => s + r.total_sales, 0)
 
+  // トレンド用データとメーカー一覧
+  const trendPivot = pivotTrend(trend)
+  const trendMakers = [...new Set(trend.map((r) => r.maker_name))]
+
+  const fmtMonth = (ym: string) => {
+    const [y, m] = ym.split('-')
+    return `${y.slice(2)}/${parseInt(m)}`
+  }
+
   const renderCustomLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: {
     cx?: number; cy?: number; midAngle?: number
     innerRadius?: number; outerRadius?: number; percent?: number
   }) => {
-    if (!cx || !cy || !midAngle === undefined || !innerRadius || !outerRadius || !percent || percent < 0.03) return null
+    if (!cx || !cy || midAngle === undefined || !innerRadius || !outerRadius || !percent || percent < 0.03) return null
     const RADIAN = Math.PI / 180
     const radius = innerRadius + (outerRadius - innerRadius) * 0.55
     const x = cx + radius * Math.cos(-(midAngle as number) * RADIAN)
@@ -100,7 +130,7 @@ export default function MakerPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h2 className="text-2xl font-bold text-gray-950">メーカー別シェア</h2>
-        <MonthSelector months={months} selected={selected} onChange={setSelected} />
+        <MonthRangeSelector />
       </div>
 
       {/* フィルター */}
@@ -147,7 +177,6 @@ export default function MakerPage() {
 
           {/* 円グラフ + 棒グラフ */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* 円グラフ */}
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
               <h3 className="text-sm font-semibold text-gray-700 mb-1">メーカー別売上シェア（円グラフ）</h3>
               <p className="text-xs text-gray-400 mb-4">上位12社 ＋ その他</p>
@@ -167,42 +196,21 @@ export default function MakerPage() {
                       <Cell key={i} fill={COLORS[i % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Legend
-                    formatter={(v) => <span style={{ fontSize: 11 }}>{v}</span>}
-                    iconSize={10}
-                    wrapperStyle={{ paddingTop: 8 }}
-                  />
-                  <Tooltip
-                    formatter={(v, name) => [
-                      `${Number(v).toLocaleString()}円`,
-                      name,
-                    ]}
-                  />
+                  <Legend formatter={(v) => <span style={{ fontSize: 11 }}>{v}</span>} iconSize={10} wrapperStyle={{ paddingTop: 8 }} />
+                  <Tooltip formatter={(v, name) => [`${Number(v).toLocaleString()}円`, name]} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
 
-            {/* 横棒グラフ */}
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
               <h3 className="text-sm font-semibold text-gray-700 mb-1">メーカー別売上ランキング（上位15社）</h3>
               <p className="text-xs text-gray-400 mb-4">売上金額順</p>
               <ResponsiveContainer width="100%" height={340}>
                 <BarChart data={barData} layout="vertical" margin={{ left: 10, right: 40 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" horizontal={false} />
-                  <XAxis
-                    type="number"
-                    tickFormatter={(v) => `${(v / 10000).toFixed(0)}万`}
-                    tick={{ fontSize: 10 }}
-                  />
-                  <YAxis
-                    type="category"
-                    dataKey="maker_name"
-                    width={90}
-                    tick={{ fontSize: 11 }}
-                  />
-                  <Tooltip
-                    formatter={(v) => [`${Number(v).toLocaleString()}円`, '売上']}
-                  />
+                  <XAxis type="number" tickFormatter={(v) => `${(v / 10000).toFixed(0)}万`} tick={{ fontSize: 10 }} />
+                  <YAxis type="category" dataKey="maker_name" width={90} tick={{ fontSize: 11 }} />
+                  <Tooltip formatter={(v) => [`${Number(v).toLocaleString()}円`, '売上']} />
                   <Bar dataKey="total_sales" fill="#16a34a" radius={[0, 4, 4, 0]}>
                     {barData.map((_, i) => (
                       <Cell key={i} fill={COLORS[i % COLORS.length]} />
@@ -212,6 +220,37 @@ export default function MakerPage() {
               </ResponsiveContainer>
             </div>
           </div>
+
+          {/* ② 時系列折れ線グラフ */}
+          {trendPivot.length > 1 && (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+              <h3 className="text-sm font-semibold text-gray-700 mb-1">メーカー別シェア推移（時系列）</h3>
+              <p className="text-xs text-gray-400 mb-4">上位8社のシェア(%)推移 — 全格納月</p>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={trendPivot} margin={{ left: 0, right: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="year_month" tickFormatter={fmtMonth} tick={{ fontSize: 11 }} />
+                  <YAxis tickFormatter={(v) => `${v.toFixed(0)}%`} tick={{ fontSize: 11 }} width={40} />
+                  <Tooltip
+                    formatter={(v, name) => [`${Number(v).toFixed(1)}%`, name]}
+                    labelFormatter={(l) => fmtMonth(String(l))}
+                  />
+                  <Legend formatter={(v) => <span style={{ fontSize: 11 }}>{v}</span>} iconSize={10} />
+                  {trendMakers.map((name, i) => (
+                    <Line
+                      key={name}
+                      type="monotone"
+                      dataKey={name}
+                      stroke={COLORS[i % COLORS.length]}
+                      strokeWidth={2}
+                      dot={{ r: 4 }}
+                      connectNulls
+                    />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
 
           {/* 一覧表 */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -224,9 +263,11 @@ export default function MakerPage() {
                   <th className="px-4 py-3 text-left font-semibold text-gray-600 w-12">順位</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-600">メーカー名</th>
                   <th className="px-4 py-3 text-right font-semibold text-gray-600">売上金額</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">販売点数</th>
+                  <th className="px-4 py-3 text-right font-semibold text-gray-600 hidden md:table-cell">前年比</th>
+                  <th className="px-4 py-3 text-right font-semibold text-gray-600 hidden sm:table-cell">販売点数</th>
+                  <th className="px-4 py-3 text-right font-semibold text-gray-600 hidden md:table-cell">前年比</th>
                   <th className="px-4 py-3 text-right font-semibold text-gray-600">シェア</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600 hidden md:table-cell w-36">構成比</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-600 hidden lg:table-cell w-32">構成比</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -243,17 +284,20 @@ export default function MakerPage() {
                     </td>
                     <td className="px-4 py-2.5 font-medium text-gray-800">{m.maker_name}</td>
                     <td className="px-4 py-2.5 text-right font-mono text-gray-700">{fmt(m.total_sales)}</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-gray-600">{m.total_quantity.toLocaleString()}</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-gray-700 font-semibold">{m.share.toFixed(1)}%</td>
-                    <td className="px-4 py-2.5 hidden md:table-cell">
+                    <td className="px-4 py-2.5 text-right hidden md:table-cell">
+                      <YoYBadge value={m.yoy_sales} />
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-mono text-gray-600 hidden sm:table-cell">{m.total_quantity.toLocaleString()}</td>
+                    <td className="px-4 py-2.5 text-right hidden md:table-cell">
+                      <YoYBadge value={m.yoy_quantity} />
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-mono font-semibold text-gray-700">{m.share.toFixed(1)}%</td>
+                    <td className="px-4 py-2.5 hidden lg:table-cell">
                       <div className="flex items-center gap-2">
                         <div className="flex-1 bg-gray-100 rounded-full h-2">
                           <div
                             className="h-2 rounded-full"
-                            style={{
-                              width: `${Math.min(m.share * 2, 100)}%`,
-                              backgroundColor: COLORS[i % COLORS.length],
-                            }}
+                            style={{ width: `${Math.min(m.share * 2, 100)}%`, backgroundColor: COLORS[i % COLORS.length] }}
                           />
                         </div>
                       </div>

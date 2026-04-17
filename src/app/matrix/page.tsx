@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import MonthSelector from '@/components/MonthSelector'
-import { getAvailableMonths, getMatrixData } from '@/lib/queries'
+import MonthRangeSelector from '@/components/MonthRangeSelector'
+import { useAppState } from '@/context/AppStateContext'
+import { getMatrixData } from '@/lib/queries'
 
 type MatrixData = {
   stores: { code: number; name: string }[]
@@ -28,28 +29,19 @@ function fmtCell(n: number) {
 }
 
 export default function MatrixPage() {
-  const [months, setMonths] = useState<string[]>([])
-  const [selected, setSelected] = useState('')
+  const { startMonth, endMonth } = useAppState()
   const [data, setData] = useState<MatrixData>({ stores: [], categories: [], matrix: {} })
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    getAvailableMonths().then((ms) => {
-      setMonths(ms)
-      if (ms.length > 0) setSelected(ms[0])
-      else setLoading(false)
-    })
-  }, [])
-
-  const load = useCallback(async (month: string) => {
-    if (!month) return
+  const load = useCallback(async (start: string, end: string) => {
+    if (!start) return
     setLoading(true)
-    const d = await getMatrixData(month)
+    const d = await getMatrixData(start, end)
     setData(d)
     setLoading(false)
   }, [])
 
-  useEffect(() => { if (selected) load(selected) }, [selected, load])
+  useEffect(() => { if (startMonth) load(startMonth, endMonth) }, [startMonth, endMonth, load])
 
   const maxVal = data.categories.length > 0 && data.stores.length > 0
     ? Math.max(...data.categories.flatMap((c) =>
@@ -61,7 +53,7 @@ export default function MatrixPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h2 className="text-2xl font-bold text-gray-950">売上マトリクス（店別×カテゴリ別）</h2>
-        <MonthSelector months={months} selected={selected} onChange={setSelected} />
+        <MonthRangeSelector />
       </div>
 
       <p className="text-sm text-gray-500">

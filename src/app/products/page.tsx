@@ -4,8 +4,10 @@ import { useEffect, useState, useCallback } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
-import MonthSelector from '@/components/MonthSelector'
-import { getAvailableMonths, getProductRanking, getCategories, getStoreSummary } from '@/lib/queries'
+import MonthRangeSelector from '@/components/MonthRangeSelector'
+import YoYBadge from '@/components/YoYBadge'
+import { useAppState } from '@/context/AppStateContext'
+import { getProductRanking, getCategories, getStoreSummary } from '@/lib/queries'
 
 type Product = {
   rank: number
@@ -15,6 +17,8 @@ type Product = {
   category_small_name: string
   total_sales: number
   total_quantity: number
+  yoy_sales: number | null
+  yoy_quantity: number | null
 }
 
 function fmt(n: number) {
@@ -23,8 +27,7 @@ function fmt(n: number) {
 }
 
 export default function ProductsPage() {
-  const [months, setMonths] = useState<string[]>([])
-  const [selected, setSelected] = useState('')
+  const { startMonth, endMonth } = useAppState()
   const [stores, setStores] = useState<{ store_code: number; store_name: string }[]>([])
   const [categories, setCategories] = useState<string[]>([])
   const [selectedStore, setSelectedStore] = useState<number | undefined>()
@@ -33,32 +36,24 @@ export default function ProductsPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    getAvailableMonths().then((ms) => {
-      setMonths(ms)
-      if (ms.length > 0) setSelected(ms[0])
-      else setLoading(false)
-    })
-  }, [])
-
-  useEffect(() => {
-    if (!selected) return
-    Promise.all([getStoreSummary(selected), getCategories(selected)]).then(([s, c]) => {
+    if (!startMonth) return
+    Promise.all([getStoreSummary(startMonth, endMonth), getCategories(startMonth, endMonth)]).then(([s, c]) => {
       setStores(s.map((x) => ({ store_code: x.store_code, store_name: x.store_name })))
       setCategories(c)
     })
-  }, [selected])
+  }, [startMonth, endMonth])
 
-  const load = useCallback(async (month: string, store?: number, cat?: string) => {
-    if (!month) return
+  const load = useCallback(async (start: string, end: string, store?: number, cat?: string) => {
+    if (!start) return
     setLoading(true)
-    const data = await getProductRanking(month, store, cat, 100)
+    const data = await getProductRanking(start, end, store, cat, 100)
     setProducts(data)
     setLoading(false)
   }, [])
 
   useEffect(() => {
-    if (selected) load(selected, selectedStore, selectedCategory)
-  }, [selected, selectedStore, selectedCategory, load])
+    if (startMonth) load(startMonth, endMonth, selectedStore, selectedCategory)
+  }, [startMonth, endMonth, selectedStore, selectedCategory, load])
 
   const top20 = products.slice(0, 20)
 
@@ -66,7 +61,7 @@ export default function ProductsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h2 className="text-2xl font-bold text-gray-950">商品ランキング（上位100品）</h2>
-        <MonthSelector months={months} selected={selected} onChange={setSelected} />
+        <MonthRangeSelector />
       </div>
 
       {/* フィルター */}
@@ -124,18 +119,19 @@ export default function ProductsPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600 w-12">順位</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600">商品名</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600 hidden lg:table-cell">メーカー</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-600 hidden md:table-cell">カテゴリ</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">売上金額</th>
-                  <th className="px-4 py-3 text-right font-semibold text-gray-600">販売点数</th>
+                  <th className="px-3 py-3 text-left font-semibold text-gray-600 w-10">順位</th>
+                  <th className="px-3 py-3 text-left font-semibold text-gray-600">商品名</th>
+                  <th className="px-3 py-3 text-left font-semibold text-gray-600 hidden lg:table-cell">メーカー</th>
+                  <th className="px-3 py-3 text-right font-semibold text-gray-600">売上金額</th>
+                  <th className="px-3 py-3 text-right font-semibold text-gray-600 hidden md:table-cell">前年比</th>
+                  <th className="px-3 py-3 text-right font-semibold text-gray-600 hidden sm:table-cell">販売点数</th>
+                  <th className="px-3 py-3 text-right font-semibold text-gray-600 hidden md:table-cell">前年比</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {products.map((p) => (
                   <tr key={p.product_code} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-2.5 text-center">
+                    <td className="px-3 py-2.5 text-center">
                       <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold
                         ${p.rank === 1 ? 'bg-yellow-100 text-yellow-700' :
                           p.rank === 2 ? 'bg-gray-100 text-gray-600' :
@@ -144,15 +140,23 @@ export default function ProductsPage() {
                         {p.rank}
                       </span>
                     </td>
-                    <td className="px-4 py-2.5 text-gray-800 max-w-xs">{p.product_name}</td>
-                    <td className="px-4 py-2.5 hidden lg:table-cell">
+                    <td className="px-3 py-2.5 text-gray-800 max-w-[160px]">
+                      <div className="truncate">{p.product_name}</div>
+                      <div className="hidden md:block lg:hidden">
+                        <span className="bg-blue-50 text-blue-700 text-xs px-1.5 py-0.5 rounded">{p.maker_name}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5 hidden lg:table-cell">
                       <span className="bg-blue-50 text-blue-700 text-xs px-2 py-0.5 rounded-full">{p.maker_name}</span>
                     </td>
-                    <td className="px-4 py-2.5 hidden md:table-cell">
-                      <span className="bg-green-50 text-green-700 text-xs px-2 py-0.5 rounded-full">{p.category_small_name}</span>
+                    <td className="px-3 py-2.5 text-right font-mono text-gray-700 whitespace-nowrap">{fmt(p.total_sales)}</td>
+                    <td className="px-3 py-2.5 text-right hidden md:table-cell">
+                      <YoYBadge value={p.yoy_sales} />
                     </td>
-                    <td className="px-4 py-2.5 text-right font-mono text-gray-700">{fmt(p.total_sales)}</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-gray-600">{p.total_quantity.toLocaleString()}</td>
+                    <td className="px-3 py-2.5 text-right font-mono text-gray-600 hidden sm:table-cell">{p.total_quantity.toLocaleString()}</td>
+                    <td className="px-3 py-2.5 text-right hidden md:table-cell">
+                      <YoYBadge value={p.yoy_quantity} />
+                    </td>
                   </tr>
                 ))}
               </tbody>

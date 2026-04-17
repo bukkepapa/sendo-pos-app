@@ -6,8 +6,9 @@ import {
   PieChart, Pie, Cell, Legend,
 } from 'recharts'
 import KpiCard from '@/components/KpiCard'
-import MonthSelector from '@/components/MonthSelector'
-import { getAvailableMonths, getKpis, getMonthlyTrend, getCategorySummary } from '@/lib/queries'
+import MonthRangeSelector from '@/components/MonthRangeSelector'
+import { useAppState } from '@/context/AppStateContext'
+import { getKpis, getMonthlyTrend, getCategorySummary } from '@/lib/queries'
 
 const COLORS = ['#16a34a', '#2563eb', '#d97706', '#dc2626', '#7c3aed', '#0891b2', '#be185d', '#65a30d', '#ea580c']
 
@@ -18,28 +19,19 @@ function fmt(n: number) {
 }
 
 export default function DashboardPage() {
-  const [months, setMonths] = useState<string[]>([])
-  const [selected, setSelected] = useState('')
+  const { months, startMonth, endMonth } = useAppState()
   const [kpis, setKpis] = useState({ totalSales: 0, totalQuantity: 0, storeCount: 0, productCount: 0 })
   const [trend, setTrend] = useState<{ year_month: string; total_sales: number }[]>([])
   const [categories, setCategories] = useState<{ category_small_name: string; total_sales: number }[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    getAvailableMonths().then((ms) => {
-      setMonths(ms)
-      if (ms.length > 0) setSelected(ms[0])
-      else setLoading(false)
-    })
-  }, [])
-
-  const load = useCallback(async (month: string) => {
-    if (!month) return
+  const load = useCallback(async (start: string, end: string) => {
+    if (!start) return
     setLoading(true)
     const [k, t, c] = await Promise.all([
-      getKpis(month),
+      getKpis(start, end),
       getMonthlyTrend(),
-      getCategorySummary(month),
+      getCategorySummary(start, end),
     ])
     setKpis(k)
     setTrend(t)
@@ -47,7 +39,9 @@ export default function DashboardPage() {
     setLoading(false)
   }, [])
 
-  useEffect(() => { if (selected) load(selected) }, [selected, load])
+  useEffect(() => {
+    if (startMonth) load(startMonth, endMonth)
+  }, [startMonth, endMonth, load])
 
   const formatMonth = (ym: string) => {
     const [y, m] = ym.split('-')
@@ -71,7 +65,7 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h2 className="text-2xl font-bold text-gray-950">ダッシュボード</h2>
-        <MonthSelector months={months} selected={selected} onChange={setSelected} />
+        <MonthRangeSelector />
       </div>
 
       {loading ? (

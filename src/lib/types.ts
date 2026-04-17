@@ -17,6 +17,8 @@ export interface StoreSummary {
   total_sales: number
   total_quantity: number
   share: number
+  yoy_sales: number | null
+  yoy_quantity: number | null
 }
 
 export interface ProductSummary {
@@ -27,6 +29,8 @@ export interface ProductSummary {
   total_sales: number
   total_quantity: number
   rank: number
+  yoy_sales: number | null
+  yoy_quantity: number | null
 }
 
 export interface CategorySummary {
@@ -39,6 +43,15 @@ export interface MakerSummary {
   maker_name: string
   total_sales: number
   total_quantity: number
+  share: number
+  yoy_sales: number | null
+  yoy_quantity: number | null
+}
+
+export interface MakerTrend {
+  year_month: string
+  maker_name: string
+  total_sales: number
   share: number
 }
 

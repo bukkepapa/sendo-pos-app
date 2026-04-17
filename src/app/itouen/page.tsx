@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import MonthSelector from '@/components/MonthSelector'
-import { getAvailableMonths, getItoenData } from '@/lib/queries'
+import MonthRangeSelector from '@/components/MonthRangeSelector'
+import { useAppState } from '@/context/AppStateContext'
+import { getItoenData } from '@/lib/queries'
 
 type ItoenData = {
   stores: { code: number; name: string }[]
@@ -21,29 +22,20 @@ function indexColor(v: number) {
 }
 
 export default function ItouenPage() {
-  const [months, setMonths] = useState<string[]>([])
-  const [selected, setSelected] = useState('')
+  const { startMonth, endMonth } = useAppState()
   const [data, setData] = useState<ItoenData>({ stores: [], products: [], salesMap: {}, indexMap: {} })
   const [mode, setMode] = useState<'index' | 'sales'>('index')
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    getAvailableMonths().then((ms) => {
-      setMonths(ms)
-      if (ms.length > 0) setSelected(ms[0])
-      else setLoading(false)
-    })
-  }, [])
-
-  const load = useCallback(async (month: string) => {
-    if (!month) return
+  const load = useCallback(async (start: string, end: string) => {
+    if (!start) return
     setLoading(true)
-    const d = await getItoenData(month)
+    const d = await getItoenData(start, end)
     setData(d)
     setLoading(false)
   }, [])
 
-  useEffect(() => { if (selected) load(selected) }, [selected, load])
+  useEffect(() => { if (startMonth) load(startMonth, endMonth) }, [startMonth, endMonth, load])
 
   function shortName(name: string) {
     return name.replace('伊藤園　', '').replace('伊藤園 ', '').slice(0, 18)
@@ -53,7 +45,7 @@ export default function ItouenPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h2 className="text-2xl font-bold text-gray-950">伊藤園 店舗別販売力分析</h2>
-        <MonthSelector months={months} selected={selected} onChange={setSelected} />
+        <MonthRangeSelector />
       </div>
 
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800 space-y-1">
