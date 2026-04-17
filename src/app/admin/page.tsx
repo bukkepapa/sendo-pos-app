@@ -211,7 +211,8 @@ export default function AdminPage() {
               store_code: parseInt(String(row[1])) || 0,
               store_name: String(row[2] || ''),
               category_small_name: String(row[3] || ''),
-              product_code: String(row[4] || ''),
+              // ".0"サフィックス除去（ExcelのCSVで商品コードが浮動小数点表記になる場合への対処）
+              product_code: String(row[4] || '').replace(/\.0+$/, ''),
               maker_name: String(row[5] || ''),
               product_name: String(row[6] || ''),
               sales_amount: parseInt(String(row[7])) || 0,
