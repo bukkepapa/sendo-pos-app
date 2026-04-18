@@ -149,7 +149,14 @@ export default function ProductsPage() {
                     <td className="px-3 py-2.5 hidden lg:table-cell">
                       <span className="bg-blue-50 text-blue-700 text-xs px-2 py-0.5 rounded-full">{p.maker_name}</span>
                     </td>
-                    <td className="px-3 py-2.5 text-right font-mono text-gray-700 whitespace-nowrap">{fmt(p.total_sales)}</td>
+                    <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                      <span className="font-mono text-gray-700">{fmt(p.total_sales)}</span>
+                      {p.yoy_sales !== null && (
+                        <span className="md:hidden block mt-0.5">
+                          <YoYBadge value={p.yoy_sales} />
+                        </span>
+                      )}
+                    </td>
                     <td className="px-3 py-2.5 text-right hidden md:table-cell">
                       <YoYBadge value={p.yoy_sales} />
                     </td>

@@ -105,7 +105,14 @@ export default function StoresPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 font-medium text-gray-800">{s.store_name}</td>
-                    <td className="px-4 py-3 text-right font-mono text-gray-700">{fmt(s.total_sales)}</td>
+                    <td className="px-4 py-3 text-right">
+                      <span className="font-mono text-gray-700">{fmt(s.total_sales)}</span>
+                      {s.yoy_sales !== null && (
+                        <span className="md:hidden block mt-0.5">
+                          <YoYBadge value={s.yoy_sales} />
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-right hidden md:table-cell">
                       <YoYBadge value={s.yoy_sales} />
                     </td>

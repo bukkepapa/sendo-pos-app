@@ -283,7 +283,15 @@ export default function MakerPage() {
                       </span>
                     </td>
                     <td className="px-4 py-2.5 font-medium text-gray-800">{m.maker_name}</td>
-                    <td className="px-4 py-2.5 text-right font-mono text-gray-700">{fmt(m.total_sales)}</td>
+                    <td className="px-4 py-2.5 text-right">
+                      <span className="font-mono text-gray-700">{fmt(m.total_sales)}</span>
+                      {/* モバイルのみ：売上前年比をセル内に表示 */}
+                      {m.yoy_sales !== null && (
+                        <span className="md:hidden block mt-0.5">
+                          <YoYBadge value={m.yoy_sales} />
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-2.5 text-right hidden md:table-cell">
                       <YoYBadge value={m.yoy_sales} />
                     </td>
