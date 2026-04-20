@@ -136,6 +136,30 @@ export async function getMakerShare(
   }))
 }
 
+export async function getItoenCategoryAnalysis(startMonth: string, endMonth?: string, storeCode?: number) {
+  const { data, error } = await supabase.rpc('get_itouen_category_analysis', {
+    p_start_month: startMonth,
+    p_end_month: endMonth ?? null,
+    p_store_code: storeCode ?? null,
+  })
+  if (error || !data) return []
+  return (data as {
+    store_code: number; store_name: string
+    category_small_name: string; category_index: number
+    product_name: string; product_sales: number
+    product_index: number; gap: number
+  }[]).map((r) => ({
+    store_code: r.store_code,
+    store_name: r.store_name,
+    category_small_name: r.category_small_name,
+    category_index: Number(r.category_index),
+    product_name: r.product_name,
+    product_sales: Number(r.product_sales),
+    product_index: Number(r.product_index),
+    gap: Number(r.gap),
+  }))
+}
+
 export async function getProductTrend(categorySmallName?: string, storeCode?: number, topN = 15) {
   const { data, error } = await supabase.rpc('get_product_trend', {
     p_category_small_name: categorySmallName ?? null,
