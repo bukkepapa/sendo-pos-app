@@ -3,11 +3,12 @@
 import { useEffect, useState, useCallback } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  LineChart, Line, Legend,
 } from 'recharts'
 import MonthRangeSelector from '@/components/MonthRangeSelector'
 import YoYBadge from '@/components/YoYBadge'
 import { useAppState } from '@/context/AppStateContext'
-import { getProductRanking, getCategories, getStoreSummary } from '@/lib/queries'
+import { getProductRanking, getProductTrend, getCategories, getStoreSummary } from '@/lib/queries'
 
 type Product = {
   rank: number
@@ -21,10 +22,43 @@ type Product = {
   yoy_quantity: number | null
 }
 
+type TrendRow = {
+  year_month: string
+  product_name: string
+  total_sales: number
+}
+
 function fmt(n: number) {
   if (n >= 10000) return `${(n / 10000).toFixed(0)}万円`
   return `${n.toLocaleString()}円`
 }
+
+function fmtMonth(ym: string) {
+  const [y, m] = ym.split('-')
+  return `${y.slice(2)}/${parseInt(m)}`
+}
+
+// 商品名を凡例用に短縮
+function shortName(name: string, max = 20) {
+  const n = name.replace(/^.*?　/, '')  // メーカー名プレフィックスを除去
+  return n.length > max ? n.slice(0, max) + '…' : n
+}
+
+// トレンドデータを Recharts 用に変換
+function pivotTrend(rows: TrendRow[]): { year_month: string; [key: string]: number | string }[] {
+  const map = new Map<string, { year_month: string; [key: string]: number | string }>()
+  for (const r of rows) {
+    if (!map.has(r.year_month)) map.set(r.year_month, { year_month: r.year_month })
+    map.get(r.year_month)![r.product_name] = r.total_sales
+  }
+  return [...map.values()].sort((a, b) => String(a.year_month).localeCompare(String(b.year_month)))
+}
+
+const LINE_COLORS = [
+  '#16a34a', '#2563eb', '#d97706', '#dc2626', '#7c3aed',
+  '#0891b2', '#be185d', '#65a30d', '#ea580c', '#0d9488',
+  '#7c2d12', '#1d4ed8', '#a21caf', '#b45309', '#064e3b',
+]
 
 export default function ProductsPage() {
   const { startMonth, endMonth } = useAppState()
@@ -33,7 +67,9 @@ export default function ProductsPage() {
   const [selectedStore, setSelectedStore] = useState<number | undefined>()
   const [selectedCategory, setSelectedCategory] = useState<string | undefined>()
   const [products, setProducts] = useState<Product[]>([])
+  const [trend, setTrend] = useState<TrendRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [trendLoading, setTrendLoading] = useState(false)
 
   useEffect(() => {
     if (!startMonth) return
@@ -51,11 +87,22 @@ export default function ProductsPage() {
     setLoading(false)
   }, [])
 
+  // カテゴリ or 店舗フィルターが変わったらトレンドも再取得
+  useEffect(() => {
+    setTrendLoading(true)
+    getProductTrend(selectedCategory, selectedStore, 15).then((d) => {
+      setTrend(d)
+      setTrendLoading(false)
+    })
+  }, [selectedCategory, selectedStore])
+
   useEffect(() => {
     if (startMonth) load(startMonth, endMonth, selectedStore, selectedCategory)
   }, [startMonth, endMonth, selectedStore, selectedCategory, load])
 
   const top20 = products.slice(0, 20)
+  const trendPivot = pivotTrend(trend)
+  const trendProducts = [...new Set(trend.map((r) => r.product_name))]
 
   return (
     <div className="space-y-6">
@@ -114,6 +161,58 @@ export default function ProductsPage() {
             </ResponsiveContainer>
           </div>
 
+          {/* ③ カテゴリ上位15商品 時系列折れ線グラフ */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+            <h3 className="text-sm font-semibold text-gray-700 mb-1">
+              上位15商品 売上推移（時系列）
+              {selectedCategory ? (
+                <span className="ml-2 text-xs font-normal text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full">
+                  {selectedCategory}
+                </span>
+              ) : (
+                <span className="ml-2 text-xs font-normal text-gray-400">全カテゴリ</span>
+              )}
+            </h3>
+            <p className="text-xs text-gray-400 mb-4">
+              全格納月の売上推移 — 全期間合計の上位15商品
+              {!selectedCategory && '（カテゴリを絞り込むとより詳細に確認できます）'}
+            </p>
+            {trendLoading ? (
+              <div className="text-center py-12 text-gray-400 text-sm">読み込み中...</div>
+            ) : trendPivot.length < 2 ? (
+              <div className="text-center py-12 text-gray-400 text-sm">2ヶ月以上のデータが必要です</div>
+            ) : (
+              <ResponsiveContainer width="100%" height={360}>
+                <LineChart data={trendPivot} margin={{ left: 0, right: 20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="year_month" tickFormatter={fmtMonth} tick={{ fontSize: 11 }} />
+                  <YAxis tickFormatter={(v) => `${(v / 10000).toFixed(0)}万`} tick={{ fontSize: 11 }} width={45} />
+                  <Tooltip
+                    formatter={(v, name) => [`${Number(v).toLocaleString()}円`, shortName(String(name))]}
+                    labelFormatter={(l) => fmtMonth(String(l))}
+                  />
+                  <Legend
+                    formatter={(v) => <span style={{ fontSize: 10 }}>{shortName(String(v))}</span>}
+                    iconSize={10}
+                    wrapperStyle={{ paddingTop: 8 }}
+                  />
+                  {trendProducts.map((name, i) => (
+                    <Line
+                      key={name}
+                      type="monotone"
+                      dataKey={name}
+                      name={name}
+                      stroke={LINE_COLORS[i % LINE_COLORS.length]}
+                      strokeWidth={1.5}
+                      dot={false}
+                      connectNulls
+                    />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
           {/* ランキング表 */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             <table className="w-full text-sm">
@@ -130,7 +229,7 @@ export default function ProductsPage() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {products.map((p) => (
-                  <tr key={p.product_code} className="hover:bg-gray-50 transition-colors">
+                  <tr key={`${p.product_code}-${p.product_name}`} className="hover:bg-gray-50 transition-colors">
                     <td className="px-3 py-2.5 text-center">
                       <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold
                         ${p.rank === 1 ? 'bg-yellow-100 text-yellow-700' :

@@ -136,6 +136,20 @@ export async function getMakerShare(
   }))
 }
 
+export async function getProductTrend(categorySmallName?: string, storeCode?: number, topN = 15) {
+  const { data, error } = await supabase.rpc('get_product_trend', {
+    p_category_small_name: categorySmallName ?? null,
+    p_store_code: storeCode ?? null,
+    p_top_n: topN,
+  })
+  if (error || !data) return []
+  return (data as { year_month: string; product_name: string; total_sales: number }[]).map((r) => ({
+    year_month: r.year_month,
+    product_name: r.product_name,
+    total_sales: Number(r.total_sales),
+  }))
+}
+
 export async function getStoreTrend(makerName?: string, topN = 8) {
   const { data, error } = await supabase.rpc('get_store_trend', {
     p_maker_name: makerName ?? null,
