@@ -33,10 +33,11 @@ export async function getMonthlyTrend() {
   }))
 }
 
-export async function getStoreSummary(startMonth: string, endMonth?: string) {
+export async function getStoreSummary(startMonth: string, endMonth?: string, makerName?: string) {
   const { data, error } = await supabase.rpc('get_store_summary', {
     p_start_month: startMonth,
     p_end_month: endMonth ?? null,
+    p_maker_name: makerName ?? null,
   })
   if (error || !data) return []
   return (data as {
@@ -133,6 +134,26 @@ export async function getMakerShare(
     yoy_sales: r.yoy_sales !== null ? Number(r.yoy_sales) : null,
     yoy_quantity: r.yoy_quantity !== null ? Number(r.yoy_quantity) : null,
   }))
+}
+
+export async function getStoreTrend(makerName?: string, topN = 8) {
+  const { data, error } = await supabase.rpc('get_store_trend', {
+    p_maker_name: makerName ?? null,
+    p_top_n: topN,
+  })
+  if (error || !data) return []
+  return (data as { year_month: string; store_code: number; store_name: string; total_sales: number }[]).map((r) => ({
+    year_month: r.year_month,
+    store_code: r.store_code,
+    store_name: r.store_name,
+    total_sales: Number(r.total_sales),
+  }))
+}
+
+export async function getTopMakers(limit = 20) {
+  const { data, error } = await supabase.rpc('get_top_makers', { p_limit: limit })
+  if (error || !data) return []
+  return (data as { maker_name: string }[]).map((r) => r.maker_name)
 }
 
 export async function getMakerTrend(storeCode?: number, categorySmallName?: string, topN = 8) {
