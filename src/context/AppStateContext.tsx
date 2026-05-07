@@ -28,8 +28,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     getAvailableMonths().then((ms) => {
       setMonths(ms)
       if (ms.length > 0) {
-        setStartMonthRaw(ms[0])
-        setEndMonthRaw(ms[0])
+        // ソート順に依存せず、常に最古月をstart・最新月をendに設定する
+        const sorted = [...ms].sort()
+        setStartMonthRaw(sorted[0])
+        setEndMonthRaw(sorted[sorted.length - 1])
       }
     })
   }, [])
