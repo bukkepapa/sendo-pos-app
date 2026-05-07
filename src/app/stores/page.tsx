@@ -67,14 +67,15 @@ export default function StoresPage() {
     getTopMakers(20).then(setMakers)
   }, [])
 
-  // メーカー変更時にトレンドも再取得
+  // 月範囲・メーカー変更時にトレンドも再取得
   useEffect(() => {
+    if (!startMonth) return
     setTrendLoading(true)
-    getStoreTrend(selectedMaker, 8).then((d) => {
+    getStoreTrend(startMonth, endMonth, selectedMaker, 8).then((d) => {
       setTrend(d)
       setTrendLoading(false)
     })
-  }, [selectedMaker])
+  }, [startMonth, endMonth, selectedMaker])
 
   const load = useCallback(async (start: string, end: string, maker?: string) => {
     if (!start) return
@@ -153,7 +154,7 @@ export default function StoresPage() {
                 </span>
               )}
             </h3>
-            <p className="text-xs text-gray-400 mb-4">上位8店舗の売上推移 — 全格納月</p>
+            <p className="text-xs text-gray-400 mb-4">上位8店舗の売上推移 — 対象期間</p>
             {trendLoading ? (
               <div className="text-center py-10 text-gray-400 text-sm">読み込み中...</div>
             ) : trendPivot.length < 2 ? (
@@ -165,6 +166,7 @@ export default function StoresPage() {
                   <XAxis dataKey="year_month" tickFormatter={fmtMonth} tick={{ fontSize: 11 }} />
                   <YAxis tickFormatter={(v) => `${(v / 10000).toFixed(0)}万`} tick={{ fontSize: 11 }} width={45} />
                   <Tooltip
+                    itemSorter={(item) => -(item.value as number)}
                     formatter={(v, name) => [`${Number(v).toLocaleString()}円`, name]}
                     labelFormatter={(l) => fmtMonth(String(l))}
                   />

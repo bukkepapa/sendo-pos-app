@@ -160,8 +160,16 @@ export async function getItoenCategoryAnalysis(startMonth: string, endMonth?: st
   }))
 }
 
-export async function getProductTrend(categorySmallName?: string, storeCode?: number, topN = 15) {
+export async function getProductTrend(
+  startMonth: string,
+  endMonth: string,
+  categorySmallName?: string,
+  storeCode?: number,
+  topN = 15
+) {
   const { data, error } = await supabase.rpc('get_product_trend', {
+    p_start_month: startMonth,
+    p_end_month: endMonth,
     p_category_small_name: categorySmallName ?? null,
     p_store_code: storeCode ?? null,
     p_top_n: topN,
@@ -174,8 +182,15 @@ export async function getProductTrend(categorySmallName?: string, storeCode?: nu
   }))
 }
 
-export async function getStoreTrend(makerName?: string, topN = 8) {
+export async function getStoreTrend(
+  startMonth: string,
+  endMonth: string,
+  makerName?: string,
+  topN = 8
+) {
   const { data, error } = await supabase.rpc('get_store_trend', {
+    p_start_month: startMonth,
+    p_end_month: endMonth,
     p_maker_name: makerName ?? null,
     p_top_n: topN,
   })
@@ -194,8 +209,16 @@ export async function getTopMakers(limit = 20) {
   return (data as { maker_name: string }[]).map((r) => r.maker_name)
 }
 
-export async function getMakerTrend(storeCode?: number, categorySmallName?: string, topN = 8) {
+export async function getMakerTrend(
+  startMonth: string,
+  endMonth: string,
+  storeCode?: number,
+  categorySmallName?: string,
+  topN = 8
+) {
   const { data, error } = await supabase.rpc('get_maker_trend', {
+    p_start_month: startMonth,
+    p_end_month: endMonth,
     p_store_code: storeCode ?? null,
     p_category_small_name: categorySmallName ?? null,
     p_top_n: topN,
@@ -205,6 +228,16 @@ export async function getMakerTrend(storeCode?: number, categorySmallName?: stri
     year_month: r.year_month,
     maker_name: r.maker_name,
     total_sales: Number(r.total_sales),
+    share: Number(r.share),
+  }))
+}
+
+export async function getCategoryTrend() {
+  const { data, error } = await supabase.rpc('get_category_trend')
+  if (error || !data) return []
+  return (data as { year_month: string; category_small_name: string; share: number }[]).map((r) => ({
+    year_month: r.year_month,
+    category_small_name: r.category_small_name,
     share: Number(r.share),
   }))
 }
@@ -290,4 +323,41 @@ export async function getItoenData(startMonth: string, endMonth?: string) {
   }
 
   return { stores, products, salesMap, indexMap }
+}
+
+// ---- ダウンロード用 ----
+
+type DownloadRow = {
+  year_month: string; store_code: number; store_name: string
+  category_small_name: string; product_code: string; maker_name: string
+  product_name: string; sales_amount: number; quantity: number
+}
+
+async function fetchSalesChunk(yearMonth: string, offset: number, limit = 5000): Promise<DownloadRow[]> {
+  const { data, error } = await supabase.rpc('download_sales_chunk', {
+    p_year_month: yearMonth,
+    p_offset: offset,
+    p_limit: limit,
+  })
+  if (error) throw new Error(error.message)
+  return (data as DownloadRow[]) ?? []
+}
+
+export async function downloadMonthData(
+  yearMonth: string,
+  onProgress?: (fetched: number, total: number) => void
+): Promise<DownloadRow[]> {
+  const CHUNK = 5000
+  const total = await getSalesCount(yearMonth)
+  const allRows: DownloadRow[] = []
+  let offset = 0
+  while (true) {
+    const chunk = await fetchSalesChunk(yearMonth, offset, CHUNK)
+    if (chunk.length === 0) break
+    allRows.push(...chunk)
+    offset += chunk.length
+    onProgress?.(allRows.length, total)
+    if (chunk.length < CHUNK) break
+  }
+  return allRows
 }

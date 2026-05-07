@@ -87,14 +87,15 @@ export default function ProductsPage() {
     setLoading(false)
   }, [])
 
-  // カテゴリ or 店舗フィルターが変わったらトレンドも再取得
+  // 月範囲・カテゴリ・店舗フィルターが変わったらトレンドも再取得
   useEffect(() => {
+    if (!startMonth) return
     setTrendLoading(true)
-    getProductTrend(selectedCategory, selectedStore, 15).then((d) => {
+    getProductTrend(startMonth, endMonth, selectedCategory, selectedStore, 15).then((d) => {
       setTrend(d)
       setTrendLoading(false)
     })
-  }, [selectedCategory, selectedStore])
+  }, [startMonth, endMonth, selectedCategory, selectedStore])
 
   useEffect(() => {
     if (startMonth) load(startMonth, endMonth, selectedStore, selectedCategory)
@@ -174,7 +175,7 @@ export default function ProductsPage() {
               )}
             </h3>
             <p className="text-xs text-gray-400 mb-4">
-              全格納月の売上推移 — 全期間合計の上位15商品
+              対象期間の売上推移 — 選択期間合計の上位15商品
               {!selectedCategory && '（カテゴリを絞り込むとより詳細に確認できます）'}
             </p>
             {trendLoading ? (
@@ -188,6 +189,7 @@ export default function ProductsPage() {
                   <XAxis dataKey="year_month" tickFormatter={fmtMonth} tick={{ fontSize: 11 }} />
                   <YAxis tickFormatter={(v) => `${(v / 10000).toFixed(0)}万`} tick={{ fontSize: 11 }} width={45} />
                   <Tooltip
+                    itemSorter={(item) => -(item.value as number)}
                     formatter={(v, name) => [`${Number(v).toLocaleString()}円`, shortName(String(name))]}
                     labelFormatter={(l) => fmtMonth(String(l))}
                   />

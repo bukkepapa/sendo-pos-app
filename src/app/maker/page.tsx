@@ -86,7 +86,7 @@ export default function MakerPage() {
     setLoading(true)
     const [m, t] = await Promise.all([
       getMakerShare(start, end, store, cat),
-      getMakerTrend(store, cat, 8),
+      getMakerTrend(start, end, store, cat, 8),
     ])
     setMakers(m)
     setTrend(t)
@@ -225,13 +225,14 @@ export default function MakerPage() {
           {trendPivot.length > 1 && (
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
               <h3 className="text-sm font-semibold text-gray-700 mb-1">メーカー別シェア推移（時系列）</h3>
-              <p className="text-xs text-gray-400 mb-4">上位8社のシェア(%)推移 — 全格納月</p>
+              <p className="text-xs text-gray-400 mb-4">上位8社のシェア(%)推移 — 対象期間</p>
               <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={trendPivot} margin={{ left: 0, right: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                   <XAxis dataKey="year_month" tickFormatter={fmtMonth} tick={{ fontSize: 11 }} />
                   <YAxis tickFormatter={(v) => `${v.toFixed(0)}%`} tick={{ fontSize: 11 }} width={40} />
                   <Tooltip
+                    itemSorter={(item) => -(item.value as number)}
                     formatter={(v, name) => [`${Number(v).toFixed(1)}%`, name]}
                     labelFormatter={(l) => fmtMonth(String(l))}
                   />
