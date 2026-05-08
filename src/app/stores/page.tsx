@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
   LineChart, Line, Legend,
@@ -54,6 +55,7 @@ const LINE_COLORS = [
 ]
 
 export default function StoresPage() {
+  const router = useRouter()
   const { startMonth, endMonth } = useAppState()
   const [stores, setStores] = useState<StoreSummary[]>([])
   const [trend, setTrend] = useState<TrendRow[]>([])
@@ -203,7 +205,11 @@ export default function StoresPage() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {stores.map((s, i) => (
-                  <tr key={s.store_code} className="hover:bg-gray-50 transition-colors">
+                  <tr
+                    key={s.store_code}
+                    onClick={() => router.push(`/stores/${s.store_code}`)}
+                    className="hover:bg-green-50 transition-colors cursor-pointer"
+                  >
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold
                         ${i === 0 ? 'bg-yellow-100 text-yellow-700' :

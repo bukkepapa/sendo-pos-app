@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import MonthRangeSelector from '@/components/MonthRangeSelector'
+import OpportunityTag from '@/components/OpportunityTag'
+import IndexBar from '@/components/IndexBar'
 import { useAppState } from '@/context/AppStateContext'
 import { getItoenData, getItoenCategoryAnalysis, getStoreSummary } from '@/lib/queries'
 
@@ -57,46 +59,6 @@ function GapBadge({ gap }: { gap: number }) {
   )
 }
 
-/* ─── チャンスラベル ───────────────────────────────────── */
-function OpportunityTag({ catIdx, prodIdx }: { catIdx: number; prodIdx: number }) {
-  const gap = prodIdx - catIdx
-  if (catIdx >= 1.1 && prodIdx < 0.8)
-    return <span className="text-xs font-bold text-white bg-red-500 px-1.5 py-0.5 rounded-full whitespace-nowrap">🔴 大チャンス</span>
-  if (catIdx >= 1.0 && gap < -0.3)
-    return <span className="text-xs font-bold text-orange-700 bg-orange-100 px-1.5 py-0.5 rounded-full whitespace-nowrap">🟡 チャンス</span>
-  if (prodIdx >= 1.5 && prodIdx > catIdx * 1.3)
-    return <span className="text-xs font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full whitespace-nowrap">🟢 好調</span>
-  return null
-}
-
-/* ─── 指数バー（カテゴリ基準線付き）─────────────────────── */
-function IndexBar({ catIdx, prodIdx }: { catIdx: number; prodIdx: number }) {
-  const MAX = 2.0
-  const catPct = Math.min((catIdx / MAX) * 100, 100)
-  const prodPct = Math.min((prodIdx / MAX) * 100, 100)
-  const gap = prodIdx - catIdx
-
-  let barColor = 'bg-green-400'
-  if (gap < -0.5) barColor = 'bg-red-400'
-  else if (gap < -0.2) barColor = 'bg-orange-300'
-  else if (gap < 0) barColor = 'bg-yellow-300'
-  else if (gap > 0.3) barColor = 'bg-blue-400'
-
-  return (
-    <div className="relative w-full h-3 bg-gray-100 rounded-full overflow-visible">
-      <div
-        className={`absolute inset-y-0 left-0 rounded-full ${barColor}`}
-        style={{ width: `${prodPct}%` }}
-      />
-      {/* カテゴリ指数 基準線（縦線） */}
-      <div
-        className="absolute top-[-2px] bottom-[-2px] w-0.5 bg-gray-600 z-10"
-        style={{ left: `${catPct}%` }}
-        title={`カテゴリ指数: ${catIdx.toFixed(2)}`}
-      />
-    </div>
-  )
-}
 
 /* ─── 商品名短縮 ────────────────────────────────────────── */
 function shortName(name: string) {
@@ -367,17 +329,24 @@ export default function ItouenPage() {
                     </div>
 
                     {/* 商品テーブル */}
-                    <table className="w-full text-xs">
+                    <table className="table-fixed w-full text-xs">
+                      <colgroup>
+                        <col className="w-[32%]" />
+                        <col className="w-[10%]" />
+                        <col className="w-[10%]" />
+                        <col className="w-[32%]" />
+                        <col className="w-[16%]" />
+                      </colgroup>
                       <thead className="bg-gray-50 border-b border-gray-100">
                         <tr>
-                          <th className="px-3 py-2 text-left font-medium text-gray-500 min-w-[150px]">商品名</th>
-                          <th className="px-3 py-2 text-center font-medium text-gray-500 w-16">商品指数</th>
-                          <th className="px-3 py-2 text-center font-medium text-gray-500 w-20">カテゴリ比</th>
-                          <th className="px-3 py-2 text-left font-medium text-gray-500">
+                          <th className="px-2 py-1.5 text-left font-medium text-gray-500">商品名</th>
+                          <th className="px-2 py-1.5 text-center font-medium text-gray-500">商品指数</th>
+                          <th className="px-2 py-1.5 text-center font-medium text-gray-500">カテゴリ比</th>
+                          <th className="px-2 py-1.5 text-left font-medium text-gray-500">
                             指数バー
-                            <span className="ml-1 text-gray-400 font-normal text-[10px]">縦線 = カテゴリ指数</span>
+                            <span className="ml-1 text-gray-400 font-normal text-[10px]">｜= カテゴリ指数</span>
                           </th>
-                          <th className="px-3 py-2 text-center font-medium text-gray-500 w-24 hidden sm:table-cell">判定</th>
+                          <th className="px-2 py-1.5 text-center font-medium text-gray-500 hidden sm:table-cell">判定</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-50">
@@ -390,21 +359,21 @@ export default function ItouenPage() {
                                 : 'hover:bg-gray-50/70'
                             }`}
                           >
-                            <td className="px-3 py-2.5 font-medium text-gray-700">
+                            <td className="px-2 py-2 font-medium text-gray-700 truncate" title={p.product_name}>
                               {shortName(p.product_name)}
                             </td>
-                            <td className="px-3 py-2.5 text-center">
+                            <td className="px-2 py-2 text-center">
                               <span className={`inline-block px-1.5 py-0.5 rounded text-xs font-bold ${indexColor(p.product_index)}`}>
                                 {p.product_index.toFixed(2)}
                               </span>
                             </td>
-                            <td className="px-3 py-2.5 text-center">
+                            <td className="px-2 py-2 text-center">
                               <GapBadge gap={p.gap} />
                             </td>
-                            <td className="px-3 py-2.5 pr-6">
+                            <td className="px-2 py-2 pr-3">
                               <IndexBar catIdx={cat.category_index} prodIdx={p.product_index} />
                             </td>
-                            <td className="px-3 py-2.5 text-center hidden sm:table-cell">
+                            <td className="px-2 py-2 text-center hidden sm:table-cell">
                               <OpportunityTag catIdx={cat.category_index} prodIdx={p.product_index} />
                             </td>
                           </tr>

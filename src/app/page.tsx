@@ -9,7 +9,7 @@ import {
 import KpiCard from '@/components/KpiCard'
 import MonthRangeSelector from '@/components/MonthRangeSelector'
 import { useAppState } from '@/context/AppStateContext'
-import { getKpis, getMonthlyTrend, getCategorySummary, getCategoryTrend } from '@/lib/queries'
+import { getKpis, getMonthlyTrend, getCategorySummary, getCategoryTrend, getPeriodComparison } from '@/lib/queries'
 
 const COLORS = ['#16a34a', '#2563eb', '#d97706', '#dc2626', '#7c3aed', '#0891b2', '#be185d', '#65a30d', '#ea580c']
 
@@ -37,21 +37,27 @@ export default function DashboardPage() {
   const [trend, setTrend] = useState<{ year_month: string; total_sales: number }[]>([])
   const [categories, setCategories] = useState<{ category_small_name: string; total_sales: number }[]>([])
   const [categoryTrend, setCategoryTrend] = useState<{ year_month: string; category_small_name: string; share: number }[]>([])
+  const [periodComp, setPeriodComp] = useState<{
+    currSales: number; currQty: number; prevSales: number; prevQty: number
+    prevStart: string; prevEnd: string; salesChange: number | null; qtyChange: number | null
+  } | null>(null)
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async (start: string, end: string) => {
     if (!start) return
     setLoading(true)
-    const [k, t, c, ct] = await Promise.all([
+    const [k, t, c, ct, pc] = await Promise.all([
       getKpis(start, end),
       getMonthlyTrend(),
       getCategorySummary(start, end),
-      getCategoryTrend(),
+      getCategoryTrend(start, end),
+      getPeriodComparison(start, end),
     ])
     setKpis(k)
     setTrend(t)
     setCategories(c)
     setCategoryTrend(ct)
+    setPeriodComp(pc)
     setLoading(false)
   }, [])
 
@@ -67,12 +73,8 @@ export default function DashboardPage() {
   // 円グラフ用：シェア計算
   const totalSales = categories.reduce((s, c) => s + c.total_sales, 0)
 
-  // カテゴリトレンド用データ
-  // 単月選択時はグラフ非表示。複数月選択時は選択期間のみを表示
-  const filteredCategoryTrend = startMonth !== endMonth
-    ? categoryTrend.filter((r) => r.year_month >= startMonth && r.year_month <= endMonth)
-    : []
-  const trendPivot = pivotCategoryTrend(filteredCategoryTrend)
+  // カテゴリトレンド用データ（SQLレベルで期間フィルタ済み。単月はグラフ非表示）
+  const trendPivot = pivotCategoryTrend(startMonth !== endMonth ? categoryTrend : [])
   // カテゴリを全期間合計の降順で並べる
   const catOrder = [...categories].map((c) => c.category_small_name)
 
@@ -106,6 +108,53 @@ export default function DashboardPage() {
             <KpiCard label="対象店舗数" value={`${kpis.storeCount}店舗`} icon="🏪" />
             <KpiCard label="伊藤園商品SKU" value={`${kpis.productCount.toLocaleString()}品`} icon="🍵" />
           </div>
+
+          {/* 前年同期比カード（前年データがある場合のみ表示） */}
+          {periodComp && periodComp.prevSales > 0 && (() => {
+            const fmtYM = (ym: string) => {
+              const [y, m] = ym.split('-')
+              return `${y}年${parseInt(m)}月`
+            }
+            const periodLabel = `前年同期: ${fmtYM(periodComp.prevStart)}〜${fmtYM(periodComp.prevEnd)}`
+            const salesSign = periodComp.salesChange !== null && periodComp.salesChange >= 0 ? '+' : ''
+            const qtySign = periodComp.qtyChange !== null && periodComp.qtyChange >= 0 ? '+' : ''
+            const salesColor = periodComp.salesChange === null ? 'text-gray-500'
+              : periodComp.salesChange >= 5 ? 'text-green-600'
+              : periodComp.salesChange <= -5 ? 'text-red-600'
+              : 'text-orange-500'
+            const qtyColor = periodComp.qtyChange === null ? 'text-gray-500'
+              : periodComp.qtyChange >= 5 ? 'text-green-600'
+              : periodComp.qtyChange <= -5 ? 'text-red-600'
+              : 'text-orange-500'
+            return (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-xs text-gray-500 font-medium">前年同期比（売上）</p>
+                      <p className={`text-2xl font-bold mt-1 ${salesColor}`}>
+                        {periodComp.salesChange !== null ? `${salesSign}${periodComp.salesChange}%` : 'データなし'}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">{periodLabel}</p>
+                    </div>
+                    <span className="text-2xl">📈</span>
+                  </div>
+                </div>
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-xs text-gray-500 font-medium">前年同期比（点数）</p>
+                      <p className={`text-2xl font-bold mt-1 ${qtyColor}`}>
+                        {periodComp.qtyChange !== null ? `${qtySign}${periodComp.qtyChange}%` : 'データなし'}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">{periodLabel}</p>
+                    </div>
+                    <span className="text-2xl">📦</span>
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
 
           {/* 月別売上棒グラフ + カテゴリ別円グラフ */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

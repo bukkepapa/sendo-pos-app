@@ -232,14 +232,32 @@ export async function getMakerTrend(
   }))
 }
 
-export async function getCategoryTrend() {
-  const { data, error } = await supabase.rpc('get_category_trend')
+export async function getCategoryTrend(startMonth?: string, endMonth?: string) {
+  const { data, error } = await supabase.rpc('get_category_trend', {
+    p_start_month: startMonth ?? null,
+    p_end_month: endMonth ?? null,
+  })
   if (error || !data) return []
   return (data as { year_month: string; category_small_name: string; share: number }[]).map((r) => ({
     year_month: r.year_month,
     category_small_name: r.category_small_name,
     share: Number(r.share),
   }))
+}
+
+export async function getPeriodComparison(startMonth: string, endMonth?: string, storeCode?: number) {
+  const { data, error } = await supabase.rpc('get_period_comparison', {
+    p_start_month: startMonth,
+    p_end_month: endMonth ?? null,
+    p_store_code: storeCode ?? null,
+  })
+  if (error || !data) return null
+  return data as {
+    currSales: number; currQty: number
+    prevSales: number; prevQty: number
+    prevStart: string; prevEnd: string
+    salesChange: number | null; qtyChange: number | null
+  }
 }
 
 export async function getMatrixData(startMonth: string, endMonth?: string) {
