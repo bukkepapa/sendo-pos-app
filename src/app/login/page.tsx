@@ -146,16 +146,6 @@ export default function LoginPage() {
               </p>
             </div>
 
-            {/* 伊藤園ユーザー向けの代替手段案内 */}
-            <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-xs text-amber-900">
-              <p className="font-semibold mb-1">📩 @itoen.co.jp の方へ</p>
-              <p className="leading-relaxed">
-                コード入力で「Token has expired」エラーが出る場合は、
-                メール本文内の<span className="font-bold">青いログインリンク</span>を直接クリックしてください。
-                （社内メールセキュリティがコードを無効化することがあります）
-              </p>
-            </div>
-
             {error && (
               <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700 break-all">
                 {error}
