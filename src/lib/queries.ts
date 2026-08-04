@@ -203,10 +203,11 @@ export async function getStoreTrend(
   }))
 }
 
-export async function getGreenTeaBrandTrend(startMonth: string, endMonth?: string) {
+export async function getGreenTeaBrandTrend(startMonth: string, endMonth?: string, size?: string) {
   const { data, error } = await supabase.rpc('get_greentea_brand_trend', {
     p_start_month: startMonth,
     p_end_month: endMonth ?? null,
+    p_size: size ?? null,
   })
   if (error || !data) return []
   return (data as { year_month: string; brand_name: string; total_sales: number; total_quantity: number }[]).map((r) => ({
@@ -217,10 +218,11 @@ export async function getGreenTeaBrandTrend(startMonth: string, endMonth?: strin
   }))
 }
 
-export async function getMugichaBrandTrend(startMonth: string, endMonth?: string) {
+export async function getMugichaBrandTrend(startMonth: string, endMonth?: string, size?: string) {
   const { data, error } = await supabase.rpc('get_mugicha_brand_trend', {
     p_start_month: startMonth,
     p_end_month: endMonth ?? null,
+    p_size: size ?? null,
   })
   if (error || !data) return []
   return (data as { year_month: string; brand_name: string; total_sales: number; total_quantity: number }[]).map((r) => ({

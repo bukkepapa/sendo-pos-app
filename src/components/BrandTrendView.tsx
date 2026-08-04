@@ -20,8 +20,15 @@ type Props = {
   subtitle: string
   brands: string[]
   colors: string[]
-  fetchTrend: (startMonth: string, endMonth?: string) => Promise<TrendRow[]>
+  fetchTrend: (startMonth: string, endMonth?: string, size?: string) => Promise<TrendRow[]>
 }
+
+const SIZE_OPTIONS: { value: string | undefined; label: string }[] = [
+  { value: undefined, label: '全サイズ' },
+  { value: '大型容器（1L〜2L）', label: '大型容器（1L〜2L）' },
+  { value: '中型容器（600ml台）', label: '中型容器（600ml台）' },
+  { value: 'それ以外', label: 'それ以外' },
+]
 
 function fmt(n: number) {
   if (n >= 100000000) return `${(n / 100000000).toFixed(2)}億円`
@@ -58,16 +65,17 @@ export default function BrandTrendView({ title, subtitle, brands, colors, fetchT
   const { startMonth, endMonth } = useAppState()
   const [trend, setTrend] = useState<TrendRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [size, setSize] = useState<string | undefined>(undefined)
 
-  const load = useCallback(async (start: string, end: string) => {
+  const load = useCallback(async (start: string, end: string, s?: string) => {
     if (!start) return
     setLoading(true)
-    const t = await fetchTrend(start, end)
+    const t = await fetchTrend(start, end, s)
     setTrend(t)
     setLoading(false)
   }, [fetchTrend])
 
-  useEffect(() => { if (startMonth) load(startMonth, endMonth) }, [startMonth, endMonth, load])
+  useEffect(() => { if (startMonth) load(startMonth, endMonth, size) }, [startMonth, endMonth, size, load])
 
   const sharePivot = pivotShare(trend, brands)
 
@@ -94,6 +102,21 @@ export default function BrandTrendView({ title, subtitle, brands, colors, fetchT
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800">
         <p>{subtitle}</p>
         <p className="mt-1">対象{brands.length}ブランドの合計売上を<strong>分母100%</strong>として、各ブランドの構成比を算出しています（他ブランドの数値は含みません）。</p>
+      </div>
+
+      {/* 容器サイズ切替 */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-sm font-medium text-gray-700 mr-1">容器サイズ：</span>
+        {SIZE_OPTIONS.map((opt) => (
+          <button
+            key={opt.label}
+            onClick={() => setSize(opt.value)}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors
+              ${size === opt.value ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+          >
+            {opt.label}
+          </button>
+        ))}
       </div>
 
       {loading ? (
