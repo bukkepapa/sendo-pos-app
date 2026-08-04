@@ -11,6 +11,8 @@ const navItems = [
   { href: '/maker', label: 'メーカーシェア', icon: '🏭' },
   { href: '/matrix', label: '売上マトリクス', icon: '📋' },
   { href: '/itouen', label: '伊藤園分析', icon: '🍵' },
+  { href: '/greentea', label: '緑茶ブランド比較', icon: '🍵' },
+  { href: '/mugicha', label: '麦茶ブランド比較', icon: '🫖' },
   { href: '/admin', label: 'データ管理', icon: '⚙️' },
 ]
 
