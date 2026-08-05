@@ -233,6 +233,20 @@ export async function getMugichaBrandTrend(startMonth: string, endMonth?: string
   }))
 }
 
+export async function getOoiochaSizeTrend(startMonth: string, endMonth?: string) {
+  const { data, error } = await supabase.rpc('get_ooiocha_size_trend', {
+    p_start_month: startMonth,
+    p_end_month: endMonth ?? null,
+  })
+  if (error || !data) return []
+  return (data as { year_month: string; brand_name: string; total_sales: number; total_quantity: number }[]).map((r) => ({
+    year_month: r.year_month,
+    brand_name: r.brand_name,
+    total_sales: Number(r.total_sales),
+    total_quantity: Number(r.total_quantity),
+  }))
+}
+
 export async function getTopMakers(limit = 20) {
   const { data, error } = await supabase.rpc('get_top_makers', { p_limit: limit })
   if (error || !data) return []

@@ -21,6 +21,9 @@ type Props = {
   brands: string[]
   colors: string[]
   fetchTrend: (startMonth: string, endMonth?: string, size?: string) => Promise<TrendRow[]>
+  groupLabel?: string
+  showSizeFilter?: boolean
+  showMonthSelector?: boolean
 }
 
 const SIZE_OPTIONS: { value: string | undefined; label: string }[] = [
@@ -61,7 +64,10 @@ function pivotShare(rows: TrendRow[], brands: string[]) {
   })
 }
 
-export default function BrandTrendView({ title, subtitle, brands, colors, fetchTrend }: Props) {
+export default function BrandTrendView({
+  title, subtitle, brands, colors, fetchTrend,
+  groupLabel = 'ブランド', showSizeFilter = true, showMonthSelector = true,
+}: Props) {
   const { startMonth, endMonth } = useAppState()
   const [trend, setTrend] = useState<TrendRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -96,28 +102,30 @@ export default function BrandTrendView({ title, subtitle, brands, colors, fetchT
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h2 className="text-2xl font-bold text-gray-950">{title}</h2>
-        <MonthRangeSelector />
+        {showMonthSelector && <MonthRangeSelector />}
       </div>
 
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-800">
         <p>{subtitle}</p>
-        <p className="mt-1">対象{brands.length}ブランドの合計売上を<strong>分母100%</strong>として、各ブランドの構成比を算出しています（他ブランドの数値は含みません）。</p>
+        <p className="mt-1">対象{brands.length}{groupLabel}の合計売上を<strong>分母100%</strong>として、各{groupLabel}の構成比を算出しています（他の数値は含みません）。</p>
       </div>
 
       {/* 容器サイズ切替 */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-sm font-medium text-gray-700 mr-1">容器サイズ：</span>
-        {SIZE_OPTIONS.map((opt) => (
-          <button
-            key={opt.label}
-            onClick={() => setSize(opt.value)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors
-              ${size === opt.value ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-          >
-            {opt.label}
-          </button>
-        ))}
-      </div>
+      {showSizeFilter && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-medium text-gray-700 mr-1">容器サイズ：</span>
+          {SIZE_OPTIONS.map((opt) => (
+            <button
+              key={opt.label}
+              onClick={() => setSize(opt.value)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors
+                ${size === opt.value ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {loading ? (
         <div className="text-center py-20 text-gray-400">読み込み中...</div>
@@ -127,8 +135,8 @@ export default function BrandTrendView({ title, subtitle, brands, colors, fetchT
         <>
           {/* 時系列折れ線グラフ（シェア推移） */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-            <h3 className="text-sm font-semibold text-gray-700 mb-1">ブランド別シェア推移（時系列）</h3>
-            <p className="text-xs text-gray-400 mb-4">対象ブランド合計＝100% とした月次構成比</p>
+            <h3 className="text-sm font-semibold text-gray-700 mb-1">{groupLabel}別シェア推移（時系列）</h3>
+            <p className="text-xs text-gray-400 mb-4">対象{groupLabel}合計＝100% とした月次構成比</p>
             <ResponsiveContainer width="100%" height={340}>
               <LineChart data={sharePivot} margin={{ left: 0, right: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -183,12 +191,12 @@ export default function BrandTrendView({ title, subtitle, brands, colors, fetchT
 
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
               <div className="px-5 py-3 border-b border-gray-200 bg-gray-50">
-                <h3 className="text-sm font-semibold text-gray-700">ブランド別 期間合計</h3>
+                <h3 className="text-sm font-semibold text-gray-700">{groupLabel}別 期間合計</h3>
               </div>
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th className="px-4 py-2.5 text-left font-semibold text-gray-600">ブランド</th>
+                    <th className="px-4 py-2.5 text-left font-semibold text-gray-600">{groupLabel}</th>
                     <th className="px-4 py-2.5 text-right font-semibold text-gray-600">売上金額</th>
                     <th className="px-4 py-2.5 text-right font-semibold text-gray-600">シェア</th>
                   </tr>
