@@ -29,7 +29,6 @@ export default function GreenTeaPage() {
           fetchTrend={getOoiochaSizeTrend}
           groupLabel="サイズ区分"
           showSizeFilter={false}
-          showMonthSelector={false}
         />
       </div>
     </div>
