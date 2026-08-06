@@ -13,6 +13,7 @@ const navItems = [
   { href: '/itouen', label: '伊藤園分析', icon: '🍵' },
   { href: '/greentea', label: '緑茶ブランド比較', icon: '🍵' },
   { href: '/mugicha', label: '麦茶ブランド比較', icon: '🫖' },
+  { href: '/category-trend', label: 'カテゴリー伸長分析', icon: '📈' },
   { href: '/admin', label: 'データ管理', icon: '⚙️' },
 ]
 

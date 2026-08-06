@@ -248,6 +248,24 @@ export async function getGreenTeaBrandTrendWithPureGreen(startMonth: string, end
   }))
 }
 
+export async function getCategoryTrendDetail(startMonth: string, endMonth?: string, storeCode?: number) {
+  const { data, error } = await supabase.rpc('get_category_trend_detail', {
+    p_start_month: startMonth,
+    p_end_month: endMonth ?? null,
+    p_store_code: storeCode ?? null,
+  })
+  if (error || !data) return []
+  return (data as {
+    year_month: string; category_small_name: string
+    total_sales: number; yoy_ratio: number | null
+  }[]).map((r) => ({
+    year_month: r.year_month,
+    category_small_name: r.category_small_name,
+    total_sales: Number(r.total_sales),
+    yoy_ratio: r.yoy_ratio !== null ? Number(r.yoy_ratio) : null,
+  }))
+}
+
 export async function getTopMakers(limit = 20) {
   const { data, error } = await supabase.rpc('get_top_makers', { p_limit: limit })
   if (error || !data) return []
