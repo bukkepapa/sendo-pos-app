@@ -25,7 +25,7 @@ export default function Sidebar() {
     <>
       {/* モバイル用ハンバーガーボタン */}
       <button
-        className="fixed top-4 left-4 z-50 md:hidden bg-green-700 text-white p-2 rounded-lg shadow-lg"
+        className="print:hidden fixed top-4 left-4 z-50 md:hidden bg-green-700 text-white p-2 rounded-lg shadow-lg"
         onClick={() => setOpen(!open)}
       >
         {open ? '✕' : '☰'}
@@ -41,7 +41,7 @@ export default function Sidebar() {
 
       {/* サイドバー本体 */}
       <aside
-        className={`fixed left-0 top-0 h-full w-56 bg-green-800 text-white z-40 transform transition-transform duration-200
+        className={`print:hidden fixed left-0 top-0 h-full w-56 bg-green-800 text-white z-40 transform transition-transform duration-200
           ${open ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}
       >
         <div className="p-4 border-b border-green-700">

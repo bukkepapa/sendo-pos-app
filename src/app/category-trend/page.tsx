@@ -21,12 +21,6 @@ const COLORS = [
   '#0891b2', '#be185d', '#65a30d', '#ea580c', '#0d9488',
 ]
 
-function fmtYen(n: number) {
-  if (n >= 100000000) return `${(n / 100000000).toFixed(2)}億円`
-  if (n >= 10000) return `${(n / 10000).toFixed(0)}万円`
-  return `${n.toLocaleString()}円`
-}
-
 const fmtMonth = (ym: string) => {
   const [y, m] = ym.split('-')
   return `${y.slice(2)}/${parseInt(m)}`
