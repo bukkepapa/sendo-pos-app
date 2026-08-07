@@ -6,6 +6,7 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
 } from 'recharts'
 import MonthRangeSelector from '@/components/MonthRangeSelector'
+import YoYBadge from '@/components/YoYBadge'
 import { useAppState } from '@/context/AppStateContext'
 
 type TrendRow = {
@@ -44,6 +45,12 @@ const fmtMonth = (ym: string) => {
   return `${y.slice(2)}/${parseInt(m)}`
 }
 
+// 年月(YYYY-MM)をdelta年ぶんシフトする（対前年同期間の算出用）
+function shiftYear(ym: string, delta: number) {
+  const [y, m] = ym.split('-')
+  return `${Number(y) + delta}-${m}`
+}
+
 // 月ごとに対象ブランド合計を分母100としたシェア(%)へピボット
 function pivotShare(rows: TrendRow[], brands: string[]) {
   const byMonth = new Map<string, Map<string, number>>()
@@ -70,14 +77,19 @@ export default function BrandTrendView({
 }: Props) {
   const { startMonth, endMonth } = useAppState()
   const [trend, setTrend] = useState<TrendRow[]>([])
+  const [prevTrend, setPrevTrend] = useState<TrendRow[]>([])
   const [loading, setLoading] = useState(true)
   const [size, setSize] = useState<string | undefined>(undefined)
 
   const load = useCallback(async (start: string, end: string, s?: string) => {
     if (!start) return
     setLoading(true)
-    const t = await fetchTrend(start, end, s)
+    const [t, pt] = await Promise.all([
+      fetchTrend(start, end, s),
+      fetchTrend(shiftYear(start, -1), shiftYear(end, -1), s),
+    ])
     setTrend(t)
+    setPrevTrend(pt)
     setLoading(false)
   }, [fetchTrend])
 
@@ -89,11 +101,13 @@ export default function BrandTrendView({
     brand_name: b,
     total_sales: trend.filter((r) => r.brand_name === b).reduce((s, r) => s + r.total_sales, 0),
     total_quantity: trend.filter((r) => r.brand_name === b).reduce((s, r) => s + r.total_quantity, 0),
+    prev_total_sales: prevTrend.filter((r) => r.brand_name === b).reduce((s, r) => s + r.total_sales, 0),
   }))
   const grandTotal = periodTotals.reduce((s, r) => s + r.total_sales, 0)
   const pieData = periodTotals.map((r) => ({
     ...r,
     share: grandTotal > 0 ? (r.total_sales / grandTotal) * 100 : 0,
+    yoy_sales: r.prev_total_sales > 0 ? ((r.total_sales - r.prev_total_sales) / r.prev_total_sales) * 100 : null,
   }))
 
   const hasData = trend.length > 0
@@ -199,6 +213,7 @@ export default function BrandTrendView({
                     <th className="px-4 py-2.5 text-left font-semibold text-gray-600">{groupLabel}</th>
                     <th className="px-4 py-2.5 text-right font-semibold text-gray-600">売上金額</th>
                     <th className="px-4 py-2.5 text-right font-semibold text-gray-600">シェア</th>
+                    <th className="px-4 py-2.5 text-right font-semibold text-gray-600">対前年比</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -215,6 +230,7 @@ export default function BrandTrendView({
                           </td>
                           <td className="px-4 py-2.5 text-right font-mono text-gray-700">{fmt(r.total_sales)}</td>
                           <td className="px-4 py-2.5 text-right font-mono font-semibold text-gray-700">{r.share.toFixed(1)}%</td>
+                          <td className="px-4 py-2.5 text-right"><YoYBadge value={r.yoy_sales} /></td>
                         </tr>
                       )
                     })}
