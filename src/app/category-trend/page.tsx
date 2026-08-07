@@ -6,6 +6,7 @@ import {
   ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import MonthRangeSelector from '@/components/MonthRangeSelector'
+import YoYBadge from '@/components/YoYBadge'
 import { useAppState } from '@/context/AppStateContext'
 import { getCategoryTrendDetail, getStoreSummary } from '@/lib/queries'
 
@@ -21,9 +22,21 @@ const COLORS = [
   '#0891b2', '#be185d', '#65a30d', '#ea580c', '#0d9488',
 ]
 
+function fmtYen(n: number) {
+  if (n >= 100000000) return `${(n / 100000000).toFixed(2)}億円`
+  if (n >= 10000) return `${(n / 10000).toFixed(0)}万円`
+  return `${n.toLocaleString()}円`
+}
+
 const fmtMonth = (ym: string) => {
   const [y, m] = ym.split('-')
   return `${y.slice(2)}/${parseInt(m)}`
+}
+
+// 年月(YYYY-MM)をdelta年ぶんシフトする（対前年同期間の算出用）
+function shiftYear(ym: string, delta: number) {
+  const [y, m] = ym.split('-')
+  return `${Number(y) + delta}-${m}`
 }
 
 function pivot<T extends number | null>(
@@ -51,6 +64,7 @@ export default function CategoryTrendPage() {
   const [stores, setStores] = useState<{ store_code: number; store_name: string }[]>([])
   const [selectedStore, setSelectedStore] = useState<number | undefined>()
   const [trend, setTrend] = useState<TrendRow[]>([])
+  const [prevTrend, setPrevTrend] = useState<TrendRow[]>([])
   const [loading, setLoading] = useState(true)
   const [hidden, setHidden] = useState<Set<string>>(new Set())
 
@@ -64,8 +78,12 @@ export default function CategoryTrendPage() {
   const load = useCallback(async (start: string, end: string, store?: number) => {
     if (!start) return
     setLoading(true)
-    const t = await getCategoryTrendDetail(start, end, store)
+    const [t, pt] = await Promise.all([
+      getCategoryTrendDetail(start, end, store),
+      getCategoryTrendDetail(shiftYear(start, -1), shiftYear(end, -1), store),
+    ])
     setTrend(t)
+    setPrevTrend(pt)
     setLoading(false)
   }, [])
 
@@ -79,6 +97,17 @@ export default function CategoryTrendPage() {
 
   const amountPivot = useMemo(() => pivot(trend, categories, (r) => r.total_sales), [trend, categories])
   const yoyPivot = useMemo(() => pivot(trend, categories, (r) => r.yoy_ratio), [trend, categories])
+
+  const periodTotals = useMemo(() => {
+    return categories
+      .map((c) => {
+        const total_sales = trend.filter((r) => r.category_small_name === c).reduce((s, r) => s + r.total_sales, 0)
+        const prev_total_sales = prevTrend.filter((r) => r.category_small_name === c).reduce((s, r) => s + r.total_sales, 0)
+        const yoy = prev_total_sales > 0 ? ((total_sales - prev_total_sales) / prev_total_sales) * 100 : null
+        return { category_small_name: c, total_sales, yoy }
+      })
+      .sort((a, b) => b.total_sales - a.total_sales)
+  }, [trend, prevTrend, categories])
 
   const toggleCategory = (name: string) => {
     setHidden((prev) => {
@@ -182,6 +211,38 @@ export default function CategoryTrendPage() {
                 ))}
               </LineChart>
             </ResponsiveContainer>
+          </div>
+
+          {/* ③ 対象期間 合算表 */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-200 bg-gray-50">
+              <h3 className="text-sm font-semibold text-gray-700">カテゴリー別 対象期間 合算</h3>
+              <p className="text-xs text-gray-400 mt-0.5">選択中の対象月の売上金額合計と、同じ月数分の前年同期間との比較</p>
+            </div>
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="px-4 py-2.5 text-left font-semibold text-gray-600">カテゴリー</th>
+                  <th className="px-4 py-2.5 text-right font-semibold text-gray-600">売上金額</th>
+                  <th className="px-4 py-2.5 text-right font-semibold text-gray-600">対前年比</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {periodTotals.map((r) => {
+                  const i = categories.indexOf(r.category_small_name)
+                  return (
+                    <tr key={r.category_small_name} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-2.5 font-medium text-gray-800">
+                        <span className="inline-block w-2.5 h-2.5 rounded-full mr-2 align-middle" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                        {r.category_small_name}
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-mono text-gray-700">{fmtYen(r.total_sales)}</td>
+                      <td className="px-4 py-2.5 text-right"><YoYBadge value={r.yoy} /></td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
         </>
       )}
