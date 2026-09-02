@@ -442,3 +442,71 @@ export async function downloadMonthData(
   }
   return allRows
 }
+
+// ---- 管理者名簿（app_admins） ----
+
+export type AdminUser = {
+  email: string
+  note: string | null
+  created_by: string | null
+  created_at: string
+}
+
+/** 管理者一覧。管理者以外が呼ぶとRLSにより空配列が返る。 */
+export async function listAdmins(): Promise<AdminUser[]> {
+  const { data, error } = await supabase
+    .from('app_admins')
+    .select('email, note, created_by, created_at')
+    .order('created_at')
+  if (error) throw new Error(error.message)
+  return (data as AdminUser[]) ?? []
+}
+
+export async function addAdmin(email: string, createdBy: string, note?: string): Promise<void> {
+  const { error } = await supabase
+    .from('app_admins')
+    .insert({ email: email.trim().toLowerCase(), note: note || null, created_by: createdBy })
+  if (error) throw new Error(error.message)
+}
+
+export async function removeAdmin(email: string): Promise<void> {
+  const { error } = await supabase.from('app_admins').delete().eq('email', email)
+  if (error) throw new Error(error.message)
+}
+
+// ---- 操作履歴（data_import_log） ----
+
+export type ImportLogEntry = {
+  id: number
+  action: 'import' | 'delete'
+  target: string
+  row_count: number
+  operator_email: string
+  created_at: string
+}
+
+/**
+ * 取込・削除を履歴に記録する。
+ * 履歴が残せなくても本体の処理は成功しているため、ここでは例外を投げずに握りつぶす。
+ */
+export async function logDataOperation(
+  action: 'import' | 'delete',
+  target: string,
+  rowCount: number
+): Promise<void> {
+  const { error } = await supabase
+    .from('data_import_log')
+    .insert({ app: 'pos', action, target, row_count: rowCount })
+  if (error) console.error('操作履歴の記録に失敗しました', error)
+}
+
+export async function listImportLog(limit = 20): Promise<ImportLogEntry[]> {
+  const { data, error } = await supabase
+    .from('data_import_log')
+    .select('id, action, target, row_count, operator_email, created_at')
+    .eq('app', 'pos')
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw new Error(error.message)
+  return (data as ImportLogEntry[]) ?? []
+}

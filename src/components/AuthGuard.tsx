@@ -1,28 +1,17 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useRouter, usePathname } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { useAuth } from '@/context/AuthContext'
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { user, loading, isAdmin } = useAuth()
-  const router   = useRouter()
-  const pathname = usePathname()
+  const { user, loading } = useAuth()
+  const router = useRouter()
 
   useEffect(() => {
-    if (loading) return
-
     // 未ログイン → ログイン画面へ
-    if (!user) {
-      router.replace('/login')
-      return
-    }
-
-    // /admin は管理者のみ（それ以外はダッシュボードへ）
-    if (pathname.startsWith('/admin') && !isAdmin) {
-      router.replace('/')
-    }
-  }, [user, loading, isAdmin, pathname, router])
+    if (!loading && !user) router.replace('/login')
+  }, [user, loading, router])
 
   // 認証確認中
   if (loading) {
@@ -39,8 +28,6 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   // 未ログイン（redirect中）
   if (!user) return null
 
-  // /admin に非管理者がアクセスしようとした（redirect中）
-  if (pathname.startsWith('/admin') && !isAdmin) return null
-
+  // ページ内の操作単位の権限（取込・削除は管理者のみ）は各ページとRLSで制御する
   return <>{children}</>
 }

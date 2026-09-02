@@ -3,13 +3,27 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Papa from 'papaparse'
 import { supabase } from '@/lib/supabase'
-import { getAvailableMonths, getSalesCount } from '@/lib/queries'
+import {
+  downloadMonthData,
+  getAvailableMonths,
+  getSalesCount,
+  logDataOperation,
+} from '@/lib/queries'
+import { downloadCsv } from '@/lib/csv'
+import { useAuth } from '@/context/AuthContext'
+import AdminManager from '@/components/AdminManager'
+import ImportLogPanel, { type ImportLogHandle } from '@/components/ImportLogPanel'
 import type { SalesRow } from '@/lib/types'
 
 type Status = 'idle' | 'parsing' | 'uploading' | 'done' | 'error'
 
 interface DeleteConfirm {
   yearMonth: string | 'all'
+  label: string
+  count: number
+}
+
+interface ExportConfirm {
   label: string
   count: number
 }
@@ -22,6 +36,13 @@ interface Preview {
 }
 
 const CHUNK_SIZE = 500
+
+// エクスポートCSVの列。インポートCSVと同じ並びにしてあるため、
+// 出力したファイルをそのまま取り込み直せる（バックアップ兼移行手段）。
+const EXPORT_HEADERS = [
+  '対象年月', '店舗コード', '店舗名称', '小分類名称',
+  '商品コード', 'メーカー名', '商品名称', '売上', '点数',
+]
 
 // "2025/05" or "2025-05" → "2025-05"
 function toYearMonth(val: string): string {
@@ -53,6 +74,7 @@ async function detectEncoding(file: File): Promise<string> {
 }
 
 export default function AdminPage() {
+  const { isAdmin } = useAuth()
   const [status, setStatus] = useState<Status>('idle')
   const [progress, setProgress] = useState(0)
   const [progressLabel, setProgressLabel] = useState('')
@@ -65,6 +87,10 @@ export default function AdminPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirm | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [countLoading, setCountLoading] = useState(false)
+  const [exportConfirm, setExportConfirm] = useState<ExportConfirm | null>(null)
+  const [exporting, setExporting] = useState<string | null>(null)
+  const [exportProgress, setExportProgress] = useState(0)
+  const logRef = useRef<ImportLogHandle>(null)
 
   useEffect(() => {
     getAvailableMonths().then(setAvailableMonths)
@@ -90,6 +116,8 @@ export default function AdminPage() {
           if (error) throw error
         }
       }
+      await logDataOperation('delete', deleteConfirm.yearMonth, deleteConfirm.count)
+      logRef.current?.reload()
       setMessage(`✅ ${deleteConfirm.label}のデータ（${deleteConfirm.count.toLocaleString()}件）を削除しました`)
       setStatus('done')
       const updated = await getAvailableMonths()
@@ -228,6 +256,8 @@ export default function AdminPage() {
             setProgressLabel(`アップロード中... ${inserted.toLocaleString()} / ${total.toLocaleString()} 行`)
           }
 
+          await logDataOperation('import', yearMonth, total)
+          logRef.current?.reload()
           setStatus('done')
           setMessage(`✅ ${yearMonth} のデータ（${total.toLocaleString()}行）をアップロードしました`)
           setPreview(null)
@@ -242,6 +272,66 @@ export default function AdminPage() {
         }
       },
     })
+  }
+
+  /**
+   * 登録済みデータをCSVとして書き出す。
+   * 列順はインポートCSVと同一なので、出力したファイルはそのまま取り込み直せる。
+   * 管理者でなくても実行できる（データの持ち出しは全ユーザーに開放している）。
+   */
+  async function handleExport(yearMonth: string | 'all', label: string) {
+    const months = yearMonth === 'all' ? availableMonths : [yearMonth]
+    if (months.length === 0) return
+
+    setExporting(yearMonth)
+    setExportProgress(0)
+    setMessage('')
+
+    try {
+      const rows: (string | number | null)[][] = []
+
+      for (let i = 0; i < months.length; i++) {
+        const monthRows = await downloadMonthData(months[i], (fetched, total) => {
+          // 月をまたぐので「何月目まで終わったか」＋「その月の進捗」で全体%を出す
+          const done = i / months.length
+          const current = total > 0 ? fetched / total / months.length : 0
+          setExportProgress(Math.round((done + current) * 100))
+        })
+        rows.push(...monthRows.map((r) => [
+          r.year_month, r.store_code, r.store_name, r.category_small_name,
+          r.product_code, r.maker_name, r.product_name, r.sales_amount, r.quantity,
+        ]))
+      }
+
+      if (rows.length === 0) {
+        setMessage('エクスポートするデータがありませんでした')
+        setStatus('error')
+        return
+      }
+
+      const suffix = yearMonth === 'all' ? `全期間_${new Date().toISOString().slice(0, 10)}` : yearMonth
+      downloadCsv(`せんどうPOS_${suffix}.csv`, EXPORT_HEADERS, rows)
+
+      setStatus('done')
+      setMessage(`✅ ${label}のデータ（${rows.length.toLocaleString()}行）をエクスポートしました`)
+    } catch (err) {
+      console.error(err)
+      setMessage(`❌ エクスポートに失敗しました: ${err instanceof Error ? err.message : String(err)}`)
+      setStatus('error')
+    } finally {
+      setExporting(null)
+      setExportProgress(0)
+    }
+  }
+
+  /** 全期間は件数が読めないと重さが判断できないので、件数を見せてから実行する */
+  async function openExportConfirm() {
+    setCountLoading(true)
+    try {
+      setExportConfirm({ label: '全期間', count: await getSalesCount() })
+    } finally {
+      setCountLoading(false)
+    }
   }
 
   const resetFile = useCallback(() => {
@@ -261,7 +351,17 @@ export default function AdminPage() {
     <div className="space-y-6 max-w-3xl">
       <h2 className="text-2xl font-bold text-gray-950">データ管理</h2>
 
+      {/* 管理者でない場合の案内（取込・削除のUIは表示されない） */}
+      {!isAdmin && (
+        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 text-sm text-gray-600">
+          データの取り込み・削除は管理者のみが行えます。
+          <br />
+          エクスポート（CSVダウンロード）はどなたでもご利用いただけます。
+        </div>
+      )}
+
       {/* 操作手順 */}
+      {isAdmin && (
       <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-sm text-green-800">
         <p className="font-semibold mb-1">毎月のデータ取り込み手順</p>
         <ol className="list-decimal list-inside space-y-1 text-green-700">
@@ -272,8 +372,10 @@ export default function AdminPage() {
         <p className="mt-2 text-xs text-green-600">※列順: 対象年月・店舗コード・店舗名称・小分類名称・商品コード・メーカー名・商品名称・売上・点数</p>
         <p className="mt-1 text-xs text-green-600">※同じ月のデータは自動的に上書きされます</p>
       </div>
+      )}
 
       {/* ドロップエリア */}
+      {isAdmin && (
       <div
         onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
         onDragLeave={() => setDragging(false)}
@@ -300,6 +402,7 @@ export default function AdminPage() {
           </>
         )}
       </div>
+      )}
 
       {/* プレビュー */}
       {preview && status !== 'uploading' && (
@@ -382,37 +485,81 @@ export default function AdminPage() {
 
       {/* 登録済み月一覧 */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between gap-2 mb-3">
           <h3 className="text-sm font-semibold text-gray-700">登録済みデータ</h3>
           {availableMonths.length > 0 && (
-            <button
-              onClick={() => openDeleteConfirm('all', '全データ')}
-              disabled={countLoading}
-              className="text-xs text-red-500 hover:text-red-700 border border-red-200 hover:border-red-400 px-3 py-1 rounded-full transition-colors disabled:opacity-50"
-            >
-              {countLoading ? '読込中...' : '🗑️ 全データ削除'}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={openExportConfirm}
+                disabled={countLoading || exporting !== null}
+                className="text-xs text-green-700 hover:text-green-900 border border-green-200 hover:border-green-400 px-3 py-1 rounded-full transition-colors disabled:opacity-50"
+              >
+                ⬇️ 全期間エクスポート
+              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => openDeleteConfirm('all', '全データ')}
+                  disabled={countLoading || exporting !== null}
+                  className="text-xs text-red-500 hover:text-red-700 border border-red-200 hover:border-red-400 px-3 py-1 rounded-full transition-colors disabled:opacity-50"
+                >
+                  {countLoading ? '読込中...' : '🗑️ 全データ削除'}
+                </button>
+              )}
+            </div>
           )}
         </div>
+
+        <p className="text-xs text-gray-400 mb-3">
+          月の名前をクリックするとその月のCSVをダウンロードできます（列順は取込用CSVと同じなので、そのまま取り込み直せます）
+        </p>
+
         {availableMonths.length === 0 ? (
           <p className="text-sm text-gray-400">まだデータがありません</p>
         ) : (
           <div className="flex flex-wrap gap-2">
             {availableMonths.map((m) => (
               <div key={m} className="flex items-center gap-1 bg-green-50 border border-green-200 text-green-700 text-sm px-3 py-1 rounded-full">
-                <span>{formatMonth(m)}</span>
                 <button
-                  onClick={() => openDeleteConfirm(m, formatMonth(m))}
-                  className="ml-1 text-green-400 hover:text-red-500 transition-colors font-bold leading-none"
-                  title={`${formatMonth(m)}を削除`}
+                  onClick={() => handleExport(m, formatMonth(m))}
+                  disabled={exporting !== null}
+                  className="hover:text-green-900 hover:underline transition-colors disabled:opacity-50 disabled:no-underline"
+                  title={`${formatMonth(m)}をCSVでダウンロード`}
                 >
-                  ×
+                  {exporting === m ? `${formatMonth(m)}… ${exportProgress}%` : formatMonth(m)}
                 </button>
+                {isAdmin && (
+                  <button
+                    onClick={() => openDeleteConfirm(m, formatMonth(m))}
+                    disabled={exporting !== null}
+                    className="ml-1 text-green-400 hover:text-red-500 transition-colors font-bold leading-none disabled:opacity-50"
+                    title={`${formatMonth(m)}を削除`}
+                  >
+                    ×
+                  </button>
+                )}
               </div>
             ))}
           </div>
         )}
+
+        {exporting === 'all' && (
+          <div className="mt-4 space-y-2">
+            <p className="text-sm font-medium text-gray-700">エクスポート中... {exportProgress}%</p>
+            <div className="w-full bg-gray-100 rounded-full h-3">
+              <div
+                className="bg-green-500 h-3 rounded-full transition-all duration-300"
+                style={{ width: `${exportProgress}%` }}
+              />
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* 管理者の管理 */}
+      {isAdmin && <AdminManager />}
+
+      {/* 操作履歴 */}
+      <ImportLogPanel ref={logRef} />
 
       {/* 削除確認ダイアログ */}
       {deleteConfirm && (
@@ -442,6 +589,42 @@ export default function AdminPage() {
                 className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2.5 rounded-lg transition-colors font-medium disabled:opacity-60"
               >
                 {deleting ? '削除中...' : '削除する'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 全期間エクスポートの確認ダイアログ */}
+      {exportConfirm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full mx-4 space-y-4">
+            <div className="text-center">
+              <p className="text-3xl mb-2">⬇️</p>
+              <h3 className="text-lg font-bold text-gray-800">全期間をエクスポートします</h3>
+              <p className="text-sm text-gray-500 mt-1">
+                <strong className="text-green-700">{exportConfirm.count.toLocaleString()}件</strong>
+                のデータを1つのCSVにまとめます。
+              </p>
+              {exportConfirm.count > 300000 && (
+                <p className="mt-2 bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg px-3 py-2 text-xs">
+                  ⚠️ 件数が多いため、完了まで数分かかり、ファイルもかなり大きくなります。
+                  月ごとに分けてダウンロードする方が扱いやすい場合があります。
+                </p>
+              )}
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setExportConfirm(null)}
+                className="flex-1 border border-gray-300 text-gray-700 py-2.5 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={() => { setExportConfirm(null); handleExport('all', '全期間') }}
+                className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2.5 rounded-lg transition-colors font-medium"
+              >
+                ダウンロード
               </button>
             </div>
           </div>
