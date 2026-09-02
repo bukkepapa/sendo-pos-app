@@ -32,7 +32,7 @@ function pivotCategoryTrend(
 }
 
 export default function DashboardPage() {
-  const { months, startMonth, endMonth } = useAppState()
+  const { months, startMonth, endMonth, monthsReady } = useAppState()
   const [kpis, setKpis] = useState({ totalSales: 0, totalQuantity: 0, storeCount: 0, productCount: 0 })
   const [trend, setTrend] = useState<{ year_month: string; total_sales: number }[]>([])
   const [categories, setCategories] = useState<{ category_small_name: string; total_sales: number }[]>([])
@@ -78,7 +78,9 @@ export default function DashboardPage() {
   // カテゴリを全期間合計の降順で並べる
   const catOrder = [...categories].map((c) => c.category_small_name)
 
-  if (!loading && months.length === 0) {
+  // 月一覧の取得が終わったうえで空なら「データなし」。
+  // loading は startMonth が決まるまで true のままなので、判定には使えない。
+  if (monthsReady && months.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-96 text-center">
         <p className="text-5xl mb-4">📂</p>

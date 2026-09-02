@@ -10,6 +10,7 @@ import {
   logDataOperation,
 } from '@/lib/queries'
 import { downloadCsv } from '@/lib/csv'
+import { useAppState } from '@/context/AppStateContext'
 import { useAuth } from '@/context/AuthContext'
 import AdminManager from '@/components/AdminManager'
 import ImportLogPanel, { type ImportLogHandle } from '@/components/ImportLogPanel'
@@ -75,6 +76,7 @@ async function detectEncoding(file: File): Promise<string> {
 
 export default function AdminPage() {
   const { isAdmin } = useAuth()
+  const { refreshMonths } = useAppState()
   const [status, setStatus] = useState<Status>('idle')
   const [progress, setProgress] = useState(0)
   const [progressLabel, setProgressLabel] = useState('')
@@ -122,6 +124,7 @@ export default function AdminPage() {
       setStatus('done')
       const updated = await getAvailableMonths()
       setAvailableMonths(updated)
+      await refreshMonths()  // 全画面共通の月一覧も更新
     } catch (err) {
       setMessage(`❌ 削除エラー: ${err instanceof Error ? err.message : String(err)}`)
       setStatus('error')
@@ -265,6 +268,7 @@ export default function AdminPage() {
           if (fileRef.current) fileRef.current.value = ''
           const updatedMonths = await getAvailableMonths()
           setAvailableMonths(updatedMonths)
+          await refreshMonths()  // 全画面共通の月一覧も更新（ダッシュボード等に即反映）
         } catch (err) {
           console.error(err)
           setMessage(`❌ エラーが発生しました: ${err instanceof Error ? err.message : String(err)}`)
