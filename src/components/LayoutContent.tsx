@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation'
 import Sidebar from './Sidebar'
 import AuthGuard from './AuthGuard'
+import PrintButton from './PrintButton'
 
 /**
  * /login ページはサイドバー・AuthGuard なしでレンダリング。
@@ -19,9 +20,10 @@ export default function LayoutContent({ children }: { children: React.ReactNode 
   return (
     <AuthGuard>
       <Sidebar />
-      <main className="md:ml-56 min-h-screen">
-        <div className="p-6 pt-16 md:pt-6">{children}</div>
+      <main className="md:ml-56 print:ml-0 min-h-screen">
+        <div className="p-6 pt-16 md:pt-6 print:p-0">{children}</div>
       </main>
+      <PrintButton />
     </AuthGuard>
   )
 }
