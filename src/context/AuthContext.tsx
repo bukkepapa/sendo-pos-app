@@ -86,7 +86,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       // トークン自動更新のたびにローディング画面を挟まないよう、更新イベントは無視する
       if (event === 'TOKEN_REFRESHED') return
-      resolve(session?.user ?? null)
+      // このコールバックは supabase-js が認証ロックを保持したまま呼ぶため、
+      // 中から supabase の別APIを直接叩くとロックの取り合いでハングすることがある。
+      // 一度イベントループに逃がしてから実行する。
+      setTimeout(() => resolve(session?.user ?? null), 0)
     })
 
     return () => {
