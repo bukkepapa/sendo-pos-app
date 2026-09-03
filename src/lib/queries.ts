@@ -257,11 +257,12 @@ export async function getCategoryTrendDetail(startMonth: string, endMonth?: stri
   if (error || !data) return []
   return (data as {
     year_month: string; category_small_name: string
-    total_sales: number; yoy_ratio: number | null
+    total_sales: number; total_qty: number; yoy_ratio: number | null
   }[]).map((r) => ({
     year_month: r.year_month,
     category_small_name: r.category_small_name,
     total_sales: Number(r.total_sales),
+    total_qty: Number(r.total_qty ?? 0),
     yoy_ratio: r.yoy_ratio !== null ? Number(r.yoy_ratio) : null,
   }))
 }
