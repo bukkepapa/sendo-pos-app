@@ -14,6 +14,7 @@ type TrendRow = {
   year_month: string
   category_small_name: string
   total_sales: number
+  total_qty: number
   yoy_ratio: number | null
 }
 
@@ -101,10 +102,15 @@ export default function CategoryTrendPage() {
   const periodTotals = useMemo(() => {
     return categories
       .map((c) => {
-        const total_sales = trend.filter((r) => r.category_small_name === c).reduce((s, r) => s + r.total_sales, 0)
-        const prev_total_sales = prevTrend.filter((r) => r.category_small_name === c).reduce((s, r) => s + r.total_sales, 0)
+        const cur = trend.filter((r) => r.category_small_name === c)
+        const prev = prevTrend.filter((r) => r.category_small_name === c)
+        const total_sales = cur.reduce((s, r) => s + r.total_sales, 0)
+        const prev_total_sales = prev.reduce((s, r) => s + r.total_sales, 0)
+        const total_qty = cur.reduce((s, r) => s + r.total_qty, 0)
+        const prev_total_qty = prev.reduce((s, r) => s + r.total_qty, 0)
         const yoy = prev_total_sales > 0 ? ((total_sales - prev_total_sales) / prev_total_sales) * 100 : null
-        return { category_small_name: c, total_sales, yoy }
+        const qtyYoy = prev_total_qty > 0 ? ((total_qty - prev_total_qty) / prev_total_qty) * 100 : null
+        return { category_small_name: c, total_sales, yoy, total_qty, qtyYoy }
       })
       .sort((a, b) => b.total_sales - a.total_sales)
   }, [trend, prevTrend, categories])
@@ -217,14 +223,16 @@ export default function CategoryTrendPage() {
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="px-5 py-3 border-b border-gray-200 bg-gray-50">
               <h3 className="text-sm font-semibold text-gray-700">カテゴリー別 対象期間 合算</h3>
-              <p className="text-xs text-gray-400 mt-0.5">選択中の対象月の売上金額合計と、同じ月数分の前年同期間との比較</p>
+              <p className="text-xs text-gray-400 mt-0.5">選択中の対象月の売上金額・販売点数の合計と、同じ月数分の前年同期間との比較</p>
             </div>
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="px-4 py-2.5 text-left font-semibold text-gray-600">カテゴリー</th>
                   <th className="px-4 py-2.5 text-right font-semibold text-gray-600">売上金額</th>
-                  <th className="px-4 py-2.5 text-right font-semibold text-gray-600">対前年比</th>
+                  <th className="px-4 py-2.5 text-right font-semibold text-gray-600 hidden md:table-cell">前年比</th>
+                  <th className="px-4 py-2.5 text-right font-semibold text-gray-600 hidden sm:table-cell">販売点数</th>
+                  <th className="px-4 py-2.5 text-right font-semibold text-gray-600 hidden md:table-cell">前年比</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -236,8 +244,14 @@ export default function CategoryTrendPage() {
                         <span className="inline-block w-2.5 h-2.5 rounded-full mr-2 align-middle" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
                         {r.category_small_name}
                       </td>
-                      <td className="px-4 py-2.5 text-right font-mono text-gray-700">{fmtYen(r.total_sales)}</td>
-                      <td className="px-4 py-2.5 text-right"><YoYBadge value={r.yoy} /></td>
+                      <td className="px-4 py-2.5 text-right">
+                        <span className="font-mono text-gray-700">{fmtYen(r.total_sales)}</span>
+                        {/* モバイルのみ：売上前年比をセル内に表示 */}
+                        <span className="md:hidden block mt-0.5"><YoYBadge value={r.yoy} /></span>
+                      </td>
+                      <td className="px-4 py-2.5 text-right hidden md:table-cell"><YoYBadge value={r.yoy} /></td>
+                      <td className="px-4 py-2.5 text-right font-mono text-gray-600 hidden sm:table-cell">{r.total_qty.toLocaleString()}</td>
+                      <td className="px-4 py-2.5 text-right hidden md:table-cell"><YoYBadge value={r.qtyYoy} /></td>
                     </tr>
                   )
                 })}
